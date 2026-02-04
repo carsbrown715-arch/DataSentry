@@ -29,11 +29,12 @@
 [x] **CI 回归保护**：把清理模块基础单测接入 CI，保证不破坏原有 NL2SQL 编译与测试。  
 
 ### P1 (Batch & Safety)
-[ ] **DB 批处理运行时**：连接/分页/分片，租约领取与断点续跑。  
-[ ] **动作执行**：实现 WRITEBACK / REVIEW / DELETE（软删/硬删），含类型/长度保护与回滚钩子。  
-[ ] **Pre-flight & Graceful Shutdown**：连接/字段/权限/MetaDB 配额校验；批次完成后退出。  
-[ ] **备份/回滚**：默认 MetaDB 备份，支持 TTL/Purge；扩展 BusinessDB 备份为可选能力。  
-[ ] **密钥管理与加密**：Backup Record AES-GCM 加密存储，Master Key 通过环境变量/配置注入。  
+[x] **DB 批处理运行时**：连接/分页/分片，租约领取与断点续跑。  
+[x] **动作执行（UPDATE/软删）**：WRITEBACK 可用，软删支持；硬删/人审后写回暂缓。  
+[x] **Pre-flight & Graceful Shutdown**：连接/字段/权限/MetaDB 配额校验；批次完成后退出。  
+[x] **备份（MetaDB）**：默认 MetaDB 备份，密文落库。  
+[ ] **回滚**：基于备份记录恢复业务数据。  
+[x] **密钥管理与加密**：Backup Record AES-GCM 加密存储，Master Key 通过环境变量/配置注入。  
 [ ] **人审链路**：Review 任务流、审核决策、写回审批闭环。  
 [ ] **策略配置 UI**：可视化配置规则/Prompt/白名单/动作策略。  
 [ ] **人审工作台 UI**：审核任务列表、详情比对、通过/拒绝与回滚入口。  

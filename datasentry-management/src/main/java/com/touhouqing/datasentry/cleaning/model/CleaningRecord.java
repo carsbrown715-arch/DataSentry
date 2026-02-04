@@ -1,5 +1,8 @@
 package com.touhouqing.datasentry.cleaning.model;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,13 +15,27 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@TableName("datasentry_cleaning_record")
 public class CleaningRecord {
 
+	@TableId(type = IdType.AUTO)
 	private Long id;
 
 	private Long agentId;
 
 	private String traceId;
+
+	private Long jobRunId;
+
+	private Integer datasourceId;
+
+	private String tableName;
+
+	private String pkJson;
+
+	private String columnName;
+
+	private String actionTaken;
 
 	private String policySnapshotJson;
 
@@ -27,6 +44,8 @@ public class CleaningRecord {
 	private String categoriesJson;
 
 	private String sanitizedPreview;
+
+	private String evidenceJson;
 
 	private String metricsJson;
 

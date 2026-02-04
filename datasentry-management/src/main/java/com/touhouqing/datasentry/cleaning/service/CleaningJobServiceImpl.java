@@ -26,8 +26,6 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 
 	private final CleaningJobRunMapper jobRunMapper;
 
-	private final CleaningPolicyResolver policyResolver;
-
 	private final DataSentryProperties dataSentryProperties;
 
 	@Override
@@ -66,17 +64,14 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 
 	@Override
 	public CleaningJobRun createRun(Long jobId) {
-		CleaningJob job = jobMapper.selectById(jobId);
-		if (job == null) {
+		if (jobMapper.selectById(jobId) == null) {
 			throw new InvalidInputException("清理任务不存在");
 		}
-		String policySnapshotJson = toJson(policyResolver.resolveSnapshot(job.getPolicyId()));
 		LocalDateTime now = LocalDateTime.now();
 		CleaningJobRun run = CleaningJobRun.builder()
 			.jobId(jobId)
 			.status(CleaningJobRunStatus.QUEUED.name())
 			.attempt(0)
-			.policySnapshotJson(policySnapshotJson)
 			.totalScanned(0L)
 			.totalFlagged(0L)
 			.totalWritten(0L)

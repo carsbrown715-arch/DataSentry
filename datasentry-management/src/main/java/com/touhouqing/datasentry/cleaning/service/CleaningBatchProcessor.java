@@ -2,14 +2,12 @@ package com.touhouqing.datasentry.cleaning.service;
 
 import com.touhouqing.datasentry.cleaning.enums.CleaningJobMode;
 import com.touhouqing.datasentry.cleaning.enums.CleaningJobRunStatus;
-import com.touhouqing.datasentry.cleaning.enums.CleaningReviewPolicy;
 import com.touhouqing.datasentry.cleaning.enums.CleaningWritebackMode;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningAllowlistMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningBackupRecordMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningJobMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningJobRunMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningRecordMapper;
-import com.touhouqing.datasentry.cleaning.mapper.CleaningReviewTaskMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningAllowlist;
 import com.touhouqing.datasentry.cleaning.model.CleaningBackupRecord;
 import com.touhouqing.datasentry.cleaning.model.CleaningContext;
@@ -17,10 +15,8 @@ import com.touhouqing.datasentry.cleaning.model.CleaningJob;
 import com.touhouqing.datasentry.cleaning.model.CleaningJobRun;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicySnapshot;
 import com.touhouqing.datasentry.cleaning.model.CleaningRecord;
-import com.touhouqing.datasentry.cleaning.model.CleaningReviewTask;
 import com.touhouqing.datasentry.cleaning.model.Finding;
 import com.touhouqing.datasentry.cleaning.pipeline.CleaningPipeline;
-import com.touhouqing.datasentry.cleaning.util.CleaningWritebackValidator;
 import com.touhouqing.datasentry.connector.pool.DBConnectionPool;
 import com.touhouqing.datasentry.connector.pool.DBConnectionPoolFactory;
 import com.touhouqing.datasentry.entity.Datasource;
@@ -32,7 +28,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -49,6 +44,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.nio.charset.StandardCharsets;
 
 @Slf4j
 @Service
@@ -62,8 +58,6 @@ public class CleaningBatchProcessor {
 	private final CleaningBackupRecordMapper backupRecordMapper;
 
 	private final CleaningRecordMapper recordMapper;
-
-	private final CleaningReviewTaskMapper reviewTaskMapper;
 
 	private final CleaningPolicyResolver policyResolver;
 
@@ -102,7 +96,7 @@ public class CleaningBatchProcessor {
 		}
 
 		List<CleaningAllowlist> allowlists = Optional.ofNullable(allowlistMapper.findActive()).orElse(List.of());
-		CleaningPolicySnapshot snapshot = resolvePolicySnapshot(run, job);
+		CleaningPolicySnapshot snapshot = policyResolver.resolveSnapshot(job.getPolicyId());
 		String pkColumn = preflight.pkColumn();
 		List<String> targetColumns = preflight.targetColumns();
 		Map<String, String> updateMapping = preflight.updateMapping();
@@ -120,8 +114,6 @@ public class CleaningBatchProcessor {
 
 		try (Connection connection = pool.getConnection(datasourceService.getDbConfig(datasource))) {
 			DatabaseDialectEnum dialect = resolveDialect(connection);
-			Map<String, CleaningWritebackValidator.ColumnMeta> columnMeta = CleaningWritebackValidator
-				.loadColumnMeta(connection, job.getTableName());
 			while (true) {
 				CleaningJobRun latestRun = jobRunMapper.selectById(run.getId());
 				if (latestRun == null) {
@@ -144,7 +136,7 @@ public class CleaningBatchProcessor {
 					}
 					String pkJson = toJsonSafe(Map.of(pkColumn, pkValue));
 					RowProcessResult rowResult = processRow(run.getId(), job, snapshot, allowlists, sanitizeRequested,
-							pkJson, pkColumn, pkValue, row, targetColumns, updateMapping, softDeleteMapping, columnMeta,
+							pkJson, pkColumn, pkValue, row, targetColumns, updateMapping, softDeleteMapping,
 							connection);
 					totalScanned++;
 					if (rowResult.flagged()) {
@@ -176,18 +168,13 @@ public class CleaningBatchProcessor {
 	private RowProcessResult processRow(Long runId, CleaningJob job, CleaningPolicySnapshot snapshot,
 			List<CleaningAllowlist> allowlists, boolean sanitizeRequested, String pkJson, String pkColumn,
 			String pkValue, Map<String, String> row, List<String> targetColumns, Map<String, String> updateMapping,
-			Map<String, Object> softDeleteMapping, Map<String, CleaningWritebackValidator.ColumnMeta> columnMeta,
-			Connection connection) {
+			Map<String, Object> softDeleteMapping, Connection connection) {
 		try {
 			boolean writebackEnabled = CleaningJobMode.WRITEBACK.name().equalsIgnoreCase(job.getMode());
 			CleaningWritebackMode writebackMode = parseWritebackMode(job.getWritebackMode());
-			CleaningReviewPolicy reviewPolicy = parseReviewPolicy(job.getReviewPolicy());
 			Map<String, CleaningContext> contextByColumn = new LinkedHashMap<>();
 			Set<String> updateColumns = new LinkedHashSet<>();
 			Set<String> softDeleteTriggers = new LinkedHashSet<>();
-			Set<String> reviewPendingColumns = new LinkedHashSet<>();
-			boolean softDeleteReviewRequired = false;
-			List<CleaningReviewTask> reviewTasks = new ArrayList<>();
 			boolean flagged = false;
 			for (String column : targetColumns) {
 				String value = row.get(column);
@@ -214,31 +201,13 @@ public class CleaningBatchProcessor {
 						&& !"ALLOW".equals(result.getVerdict().name())) {
 					flagged = true;
 				}
-				boolean updateCandidate = writebackEnabled && writebackMode == CleaningWritebackMode.UPDATE
-						&& result.getVerdict() != null && result.getVerdict().name().equals("REDACTED")
-						&& result.getSanitizedText() != null
-						&& !Objects.equals(result.getSanitizedText(), row.get(column));
-				boolean softDeleteCandidate = writebackEnabled && writebackMode == CleaningWritebackMode.SOFT_DELETE
-						&& result.getVerdict() != null && (result.getVerdict().name().equals("BLOCK")
-								|| result.getVerdict().name().equals("REDACTED"));
-				boolean reviewRequired = isReviewRequired(reviewPolicy,
-						result.getVerdict() != null ? result.getVerdict().name() : null);
-				if (reviewRequired && (updateCandidate || softDeleteCandidate)) {
-					reviewPendingColumns.add(column);
-					if (softDeleteCandidate) {
-						softDeleteReviewRequired = true;
-					}
-					CleaningReviewTask task = buildReviewTask(runId, job, pkJson, column, result, updateCandidate,
-							softDeleteCandidate, updateMapping, softDeleteMapping, row);
-					if (task != null) {
-						reviewTasks.add(task);
-					}
-					continue;
-				}
-				if (updateCandidate) {
+				if (writebackEnabled && writebackMode == CleaningWritebackMode.UPDATE && result.getVerdict() != null
+						&& result.getVerdict().name().equals("REDACTED")) {
 					updateColumns.add(column);
 				}
-				if (softDeleteCandidate) {
+				if (writebackEnabled && writebackMode == CleaningWritebackMode.SOFT_DELETE
+						&& result.getVerdict() != null && (result.getVerdict().name().equals("BLOCK")
+								|| result.getVerdict().name().equals("REDACTED"))) {
 					softDeleteTriggers.add(column);
 				}
 			}
@@ -260,16 +229,13 @@ public class CleaningBatchProcessor {
 							}
 						}
 						if (!updateValues.isEmpty()) {
-							backupAndWrite(runId, job, pkJson, pkColumn, pkValue, row, updateValues, columnMeta,
-									connection);
+							backupAndWrite(runId, job, pkJson, pkColumn, pkValue, row, updateValues, connection);
 							written = true;
 						}
 					}
-					else if (writebackMode == CleaningWritebackMode.SOFT_DELETE && !softDeleteTriggers.isEmpty()
-							&& !softDeleteReviewRequired) {
+					else if (writebackMode == CleaningWritebackMode.SOFT_DELETE && !softDeleteTriggers.isEmpty()) {
 						if (!softDeleteMapping.isEmpty()) {
-							backupAndWrite(runId, job, pkJson, pkColumn, pkValue, row, softDeleteMapping, columnMeta,
-									connection);
+							backupAndWrite(runId, job, pkJson, pkColumn, pkValue, row, softDeleteMapping, connection);
 							written = true;
 						}
 					}
@@ -280,16 +246,10 @@ public class CleaningBatchProcessor {
 				}
 			}
 
-			for (CleaningReviewTask task : reviewTasks) {
-				reviewTaskMapper.insert(task);
-			}
 			for (Map.Entry<String, CleaningContext> entry : contextByColumn.entrySet()) {
 				String column = entry.getKey();
 				CleaningContext context = entry.getValue();
 				String actionTaken = "NONE";
-				if (reviewPendingColumns.contains(column)) {
-					actionTaken = "REVIEW_PENDING";
-				}
 				if (writebackMode == CleaningWritebackMode.UPDATE && updateAppliedColumns.contains(column) && written) {
 					actionTaken = "UPDATE";
 				}
@@ -327,12 +287,7 @@ public class CleaningBatchProcessor {
 	}
 
 	private void backupAndWrite(Long runId, CleaningJob job, String pkJson, String pkColumn, String pkValue,
-			Map<String, String> row, Map<String, Object> updateValues,
-			Map<String, CleaningWritebackValidator.ColumnMeta> columnMeta, Connection connection) throws Exception {
-		String validationError = CleaningWritebackValidator.validateValues(columnMeta, updateValues);
-		if (validationError != null) {
-			throw new IllegalStateException(validationError);
-		}
+			Map<String, String> row, Map<String, Object> updateValues, Connection connection) throws Exception {
 		Map<String, Object> beforeRow = new LinkedHashMap<>();
 		for (String column : updateValues.keySet()) {
 			beforeRow.put(column, row.get(column));
@@ -507,91 +462,6 @@ public class CleaningBatchProcessor {
 			}
 		}
 		return CleaningWritebackMode.NONE;
-	}
-
-	private CleaningPolicySnapshot resolvePolicySnapshot(CleaningJobRun run, CleaningJob job) {
-		String snapshotJson = run.getPolicySnapshotJson();
-		if (snapshotJson != null && !snapshotJson.isBlank()) {
-			try {
-				return JsonUtil.getObjectMapper().readValue(snapshotJson, CleaningPolicySnapshot.class);
-			}
-			catch (Exception e) {
-				log.warn("Failed to parse policy snapshot for run {}", run.getId(), e);
-			}
-		}
-		return policyResolver.resolveSnapshot(job.getPolicyId());
-	}
-
-	private CleaningReviewPolicy parseReviewPolicy(String policy) {
-		if (policy == null || policy.isBlank()) {
-			return CleaningReviewPolicy.NEVER;
-		}
-		for (CleaningReviewPolicy value : CleaningReviewPolicy.values()) {
-			if (value.name().equalsIgnoreCase(policy)) {
-				return value;
-			}
-		}
-		return CleaningReviewPolicy.NEVER;
-	}
-
-	private boolean isReviewRequired(CleaningReviewPolicy reviewPolicy, String verdict) {
-		if (reviewPolicy == null || reviewPolicy == CleaningReviewPolicy.NEVER) {
-			return false;
-		}
-		if (verdict == null) {
-			return false;
-		}
-		if (reviewPolicy == CleaningReviewPolicy.ALWAYS) {
-			return !"ALLOW".equals(verdict);
-		}
-		return "REVIEW".equals(verdict) || "BLOCK".equals(verdict);
-	}
-
-	private CleaningReviewTask buildReviewTask(Long runId, CleaningJob job, String pkJson, String column,
-			CleaningContext context, boolean updateCandidate, boolean softDeleteCandidate,
-			Map<String, String> updateMapping, Map<String, Object> softDeleteMapping, Map<String, String> row) {
-		Map<String, Object> payload = new LinkedHashMap<>();
-		Map<String, Object> beforeRow = new LinkedHashMap<>();
-		String actionSuggested = null;
-		if (updateCandidate) {
-			String targetColumn = updateMapping.getOrDefault(column, column);
-			payload.put(targetColumn, context.getSanitizedText());
-			beforeRow.put(targetColumn, row.get(targetColumn));
-			actionSuggested = "UPDATE";
-		}
-		else if (softDeleteCandidate) {
-			if (softDeleteMapping.isEmpty()) {
-				return null;
-			}
-			payload.putAll(softDeleteMapping);
-			for (String targetColumn : softDeleteMapping.keySet()) {
-				beforeRow.put(targetColumn, row.get(targetColumn));
-			}
-			actionSuggested = "SOFT_DELETE";
-		}
-		if (payload.isEmpty()) {
-			return null;
-		}
-		LocalDateTime now = LocalDateTime.now();
-		return CleaningReviewTask.builder()
-			.jobRunId(runId)
-			.agentId(job.getAgentId())
-			.datasourceId(job.getDatasourceId())
-			.tableName(job.getTableName())
-			.pkJson(pkJson)
-			.pkHash(hashPk(pkJson))
-			.columnName(column)
-			.verdict(context.getVerdict() != null ? context.getVerdict().name() : null)
-			.categoriesJson(toJsonSafe(resolveCategories(context.getFindings())))
-			.sanitizedPreview(context.getSanitizedText())
-			.actionSuggested(actionSuggested)
-			.writebackPayloadJson(toJsonSafe(payload))
-			.beforeRowJson(toJsonSafe(beforeRow))
-			.status("PENDING")
-			.version(0)
-			.createdTime(now)
-			.updatedTime(now)
-			.build();
 	}
 
 	private String resolveLastPk(String checkpointJson) {

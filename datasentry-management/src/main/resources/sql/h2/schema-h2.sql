@@ -345,15 +345,92 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_allowlist (
   INDEX idx_expire_time (expire_time)
 ) ENGINE=InnoDB COMMENT='清理白名单';
 
+-- 清理任务
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_job (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  agent_id INT NOT NULL COMMENT '智能体ID',
+  datasource_id INT NOT NULL COMMENT '数据源ID',
+  table_name VARCHAR(255) NOT NULL COMMENT '目标表',
+  pk_columns_json TEXT NOT NULL COMMENT '主键列JSON',
+  target_columns_json TEXT NOT NULL COMMENT '目标列JSON',
+  where_sql TEXT COMMENT '过滤条件',
+  policy_id INT NOT NULL COMMENT '策略ID',
+  mode VARCHAR(50) DEFAULT 'DRY_RUN' COMMENT '运行模式',
+  writeback_mode VARCHAR(50) DEFAULT 'NONE' COMMENT '写回模式',
+  review_policy VARCHAR(50) DEFAULT 'NEVER' COMMENT '人审策略',
+  backup_policy_json TEXT COMMENT '备份策略JSON',
+  writeback_mapping_json TEXT COMMENT '写回映射JSON',
+  batch_size INT DEFAULT 200 COMMENT '批量大小',
+  concurrency INT DEFAULT 1 COMMENT '并发数',
+  rate_limit INT DEFAULT NULL COMMENT '限速',
+  enabled TINYINT DEFAULT 1 COMMENT '是否启用',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  INDEX idx_agent_id (agent_id),
+  INDEX idx_datasource_id (datasource_id),
+  INDEX idx_policy_id (policy_id),
+  INDEX idx_enabled (enabled)
+) ENGINE=InnoDB COMMENT='清理任务';
+
+-- 清理任务运行实例
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_job_run (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  job_id BIGINT NOT NULL COMMENT '任务ID',
+  status VARCHAR(50) NOT NULL COMMENT '状态',
+  lease_owner VARCHAR(100) DEFAULT NULL COMMENT '租约持有者',
+  lease_until TIMESTAMP NULL DEFAULT NULL COMMENT '租约过期时间',
+  heartbeat_time TIMESTAMP NULL DEFAULT NULL COMMENT '心跳时间',
+  attempt INT DEFAULT 0 COMMENT '重试次数',
+  checkpoint_json TEXT COMMENT '游标检查点JSON',
+  total_scanned BIGINT DEFAULT 0 COMMENT '扫描总数',
+  total_flagged BIGINT DEFAULT 0 COMMENT '命中总数',
+  total_written BIGINT DEFAULT 0 COMMENT '写回总数',
+  total_failed BIGINT DEFAULT 0 COMMENT '失败总数',
+  started_time TIMESTAMP NULL DEFAULT NULL COMMENT '开始时间',
+  ended_time TIMESTAMP NULL DEFAULT NULL COMMENT '结束时间',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  INDEX idx_job_id (job_id),
+  INDEX idx_status (status),
+  INDEX idx_lease_until (lease_until)
+) ENGINE=InnoDB COMMENT='清理任务运行实例';
+
+-- 清理备份记录
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_backup_record (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  job_run_id BIGINT NOT NULL COMMENT '任务运行ID',
+  datasource_id INT NOT NULL COMMENT '数据源ID',
+  table_name VARCHAR(255) NOT NULL COMMENT '表名',
+  pk_json TEXT NOT NULL COMMENT '主键JSON',
+  pk_hash VARCHAR(128) NOT NULL COMMENT '主键Hash',
+  encryption_provider VARCHAR(50) DEFAULT NULL COMMENT '加密提供方',
+  key_version VARCHAR(50) DEFAULT NULL COMMENT '密钥版本',
+  before_row_ciphertext TEXT COMMENT '加密后的旧值快照',
+  before_row_json TEXT COMMENT '明文旧值快照',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  INDEX idx_job_run_id (job_run_id),
+  INDEX idx_pk_hash (pk_hash)
+) ENGINE=InnoDB COMMENT='清理备份记录';
+
 -- 清理审计记录
 CREATE TABLE IF NOT EXISTS datasentry_cleaning_record (
   id BIGINT NOT NULL AUTO_INCREMENT,
   agent_id INT NOT NULL COMMENT '智能体ID',
   trace_id VARCHAR(64) DEFAULT NULL COMMENT 'Trace ID',
+  job_run_id BIGINT DEFAULT NULL COMMENT '任务运行ID',
+  datasource_id INT DEFAULT NULL COMMENT '数据源ID',
+  table_name VARCHAR(255) DEFAULT NULL COMMENT '表名',
+  pk_json TEXT COMMENT '主键JSON',
+  column_name VARCHAR(255) DEFAULT NULL COMMENT '命中字段',
+  action_taken VARCHAR(50) DEFAULT NULL COMMENT '执行动作',
   policy_snapshot_json TEXT COMMENT '策略快照',
   verdict VARCHAR(50) NOT NULL COMMENT '判定结果',
   categories_json TEXT COMMENT '命中类别JSON',
   sanitized_preview TEXT COMMENT '脱敏预览',
+  evidence_json TEXT COMMENT '证据信息JSON',
   metrics_json TEXT COMMENT '指标JSON',
   execution_time_ms BIGINT DEFAULT NULL COMMENT '执行时间(ms)',
   detector_source VARCHAR(100) DEFAULT NULL COMMENT '检测来源',
@@ -361,5 +438,6 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_record (
   PRIMARY KEY (id),
   INDEX idx_agent_id (agent_id),
   INDEX idx_trace_id (trace_id),
+  INDEX idx_job_run_id (job_run_id),
   INDEX idx_created_time (created_time)
 ) ENGINE=InnoDB COMMENT='清理审计记录';

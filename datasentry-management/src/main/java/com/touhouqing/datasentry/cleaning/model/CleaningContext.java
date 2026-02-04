@@ -32,6 +32,20 @@ public class CleaningContext {
 
 	private String traceId;
 
+	private Long jobRunId;
+
+	private Integer datasourceId;
+
+	private String tableName;
+
+	private String pkJson;
+
+	private String columnName;
+
+	private String actionTaken;
+
+	private String evidenceJson;
+
 	private CleaningPolicySnapshot policySnapshot;
 
 	@Builder.Default
