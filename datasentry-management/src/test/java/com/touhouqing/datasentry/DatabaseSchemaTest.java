@@ -18,10 +18,12 @@ package com.touhouqing.datasentry;
 import com.touhouqing.datasentry.service.MySqlContainerConfiguration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.context.ImportTestcontainers;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 
 import java.sql.Connection;
@@ -40,7 +42,9 @@ import java.util.Set;
  * @author vlsmb
  * @since 2025/9/26
  */
-@MybatisTest
+@SpringBootTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@TestPropertySource(properties = {"spring.sql.init.mode=never"})
 @ImportTestcontainers(com.touhouqing.datasentry.service.MySqlContainerConfiguration.class)
 @ImportAutoConfiguration(com.touhouqing.datasentry.service.MySqlContainerConfiguration.class)
 public class DatabaseSchemaTest {
