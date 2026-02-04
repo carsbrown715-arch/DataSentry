@@ -12,8 +12,6 @@
 - **问题类型**：敏感信息检测/脱敏、垃圾信息识别/清理、可选人工复核。
 - **动作**：检测返回、脱敏返回、脱敏写回、先人审后写回、删除（软删/硬删）。
 
-> P0 仅完成“实时文本”链路的检测/脱敏与审计闭环；数据库批处理、写回/回滚、人审在 P1，结构化字段支持推迟到 P2。
-
 ### 0.2 设计原则
 - **配置驱动**：场景与表结构不固定，所有差异通过配置表达。
 - **安全优先**：默认最小权限、默认不写回、默认不落明文。
@@ -142,10 +140,6 @@ flowchart LR
 - 默认只返回检测结果/脱敏文本；写回能力需显式启用与授权。
 - 不记录明文（可配置摘要/哈希）。
 
-**P0 边界说明**
-- 仅支持纯文本入参，不解析 JSON/结构化字段（该能力推迟到 P2）。
-- 策略版本化仅保存快照（`policy_snapshot_json`），不强制不可变策略。
-
 #### 4.1.1 影子模式（Shadow Mode）
 - API 主线程直接放行，异步复制流量进入 Pipeline。
 - 用于验证新策略误杀率与性能，不影响线上用户。
@@ -171,8 +165,8 @@ flowchart LR
 - **数据库**：`datasource_id`、`table`、`pk`、`columns`
 - `where_filter`（可选，需 allowlist 与参数化）
 
-#### 5.2.1 JSON/结构化字段支持（P2）
-目标列支持 JSONPath 描述（P2 计划项）：
+#### 5.2.1 JSON/结构化字段支持
+目标列支持 JSONPath 描述：
 - 例：`{"col": "extra_info", "json_path": "$.contact.phone"}`
 - **局部脱敏**：仅替换 JSON 内特定 value，保持结构完整。
 
@@ -185,7 +179,7 @@ flowchart LR
 
 #### 5.3.1 策略版本化与不可变性
 - Policy 需支持版本号（v1/v2）。
-- `job_run` 启动时记录 `policy_snapshot_json`（版本号或快照 JSON）。
+- `job_run` 启动时记录 `policy_version_snapshot`（版本号或快照 JSON）。
 - 运行时策略不可变，避免中途修改导致结果不一致。
 
 ### 5.4 Action 配置
@@ -246,7 +240,7 @@ flowchart LR
 `datasentry_cleaning_job_run`
 - `metrics_json`（p99 延迟、token 使用、L1/L2 命中率）
 - `trigger_type`：`MANUAL | SCHEDULED | API`
-- `policy_snapshot_json`
+- `policy_version_snapshot`
 
 `datasentry_cleaning_record`
 - `execution_time_ms`
