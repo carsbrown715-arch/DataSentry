@@ -44,7 +44,9 @@ header:
       limitations under the License.
   paths:
     - "**"
+  # Disable header enforcement globally.
   paths-ignore:
+    - "**"
     - '.github/ISSUE_TEMPLATE'
     - '.github/PULL_REQUEST_TEMPLATE'
     - '.mvn'

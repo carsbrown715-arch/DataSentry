@@ -1,0 +1,76 @@
+package com.touhouqing.datasentry.cleaning.controller;
+
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRuleUpdateRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyView;
+import com.touhouqing.datasentry.cleaning.dto.CleaningRuleRequest;
+import com.touhouqing.datasentry.cleaning.model.CleaningPolicy;
+import com.touhouqing.datasentry.cleaning.model.CleaningRule;
+import com.touhouqing.datasentry.cleaning.service.CleaningPolicyService;
+import com.touhouqing.datasentry.vo.ApiResponse;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/api/datasentry/cleaning")
+public class CleaningPolicyController {
+
+	private final CleaningPolicyService policyService;
+
+	@GetMapping("/policies")
+	public ResponseEntity<ApiResponse<List<CleaningPolicyView>>> listPolicies() {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.listPolicies()));
+	}
+
+	@PostMapping("/policies")
+	public ResponseEntity<ApiResponse<CleaningPolicy>> createPolicy(@RequestBody @Valid CleaningPolicyRequest request) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.createPolicy(request)));
+	}
+
+	@PutMapping("/policies/{policyId}")
+	public ResponseEntity<ApiResponse<CleaningPolicy>> updatePolicy(@PathVariable Long policyId,
+			@RequestBody @Valid CleaningPolicyRequest request) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.updatePolicy(policyId, request)));
+	}
+
+	@DeleteMapping("/policies/{policyId}")
+	public ResponseEntity<ApiResponse<Void>> deletePolicy(@PathVariable Long policyId) {
+		policyService.deletePolicy(policyId);
+		return ResponseEntity.ok(ApiResponse.success("success"));
+	}
+
+	@PutMapping("/policies/{policyId}/rules")
+	public ResponseEntity<ApiResponse<Void>> updatePolicyRules(@PathVariable Long policyId,
+			@RequestBody @Valid CleaningPolicyRuleUpdateRequest request) {
+		policyService.updatePolicyRules(policyId, request);
+		return ResponseEntity.ok(ApiResponse.success("success"));
+	}
+
+	@GetMapping("/rules")
+	public ResponseEntity<ApiResponse<List<CleaningRule>>> listRules() {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.listRules()));
+	}
+
+	@PostMapping("/rules")
+	public ResponseEntity<ApiResponse<CleaningRule>> createRule(@RequestBody @Valid CleaningRuleRequest request) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.createRule(request)));
+	}
+
+	@PutMapping("/rules/{ruleId}")
+	public ResponseEntity<ApiResponse<CleaningRule>> updateRule(@PathVariable Long ruleId,
+			@RequestBody @Valid CleaningRuleRequest request) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.updateRule(ruleId, request)));
+	}
+
+	@DeleteMapping("/rules/{ruleId}")
+	public ResponseEntity<ApiResponse<Void>> deleteRule(@PathVariable Long ruleId) {
+		policyService.deleteRule(ruleId);
+		return ResponseEntity.ok(ApiResponse.success("success"));
+	}
+
+}

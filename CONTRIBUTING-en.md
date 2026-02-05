@@ -2,15 +2,15 @@
 
 ## How to Contribute
 
-## Thank you for contributing to Spring AI Alibaba-DataAgent!
+## Thank you for contributing to DataSentry!
 
-Since the beginning of open-source development, DataAgent has received a lot of attention from the community. Every issue and PR from the community helps the project and contributes to building a better Spring AI.
+Since the beginning of open-source development, DataSentry has received a lot of attention from the community. Every issue and PR from the community helps the project and contributes to building a better DataSentry.
 
 We sincerely thank all developers who have submitted issues and PRs to this project. We hope more developers from the community will join us in making this project better.
 
 ## How to Contribute
 
-Before contributing code, please take a moment to understand the process for contributing to Spring AI Alibaba.
+Before contributing code, please take a moment to understand the process for contributing to DataSentry.
 
 ### What to Contribute?
 
@@ -20,28 +20,28 @@ For complex modifications, we recommend adding a Feature label in an Issue first
 
 ### Where to Start?
 
-If you're a first-time contributor, you can start with tasks from [good first issue](https://github.com/spring-ai-alibaba/DataAgent/labels/good%20first%20issue) and [help wanted](https://github.com/spring-ai-alibaba/DataAgent/labels/help%20wanted).
+If you're a first-time contributor, you can start with tasks from [good first issue](https://github.com/TouHouQing/DataSentry/labels/good%20first%20issue) and [help wanted](https://github.com/TouHouQing/DataSentry/labels/help%20wanted).
 
 ### Fork the Repository and Clone It Locally
 
-- Click the `Fork` icon in the upper right corner of [this project](https://github.com/spring-ai-alibaba/DataAgent) to fork alibaba/spring-ai-alibaba to your own space.
-- Clone the spring-ai-alibaba repository from your account locally. For example, if your account is `chickenlj`, run `git clone https://github.com/chickenlj/DataAgent.git` to perform the clone operation.
+- Click the `Fork` icon in the upper right corner of [this project](https://github.com/TouHouQing/DataSentry) to fork the repository to your own space.
+- Clone the DataSentry repository from your account locally. For example, if your account is `chickenlj`, run `git clone https://github.com/chickenlj/DataSentry.git` to perform the clone operation.
 
 ### Configure Github Information
 
 - Run `git config --list` on your machine to view your global git username and email.
 - Check if the displayed user.name and user.email match your github username and email.
-- If your company has its own gitlab or uses other commercial gitlab, there may be a mismatch. In this case, you need to set a separate username and email for the spring-ai-alibaba project.
+- If your company has its own gitlab or uses other commercial gitlab, there may be a mismatch. In this case, you need to set a separate username and email for the DataSentry project.
 - For instructions on setting username and email, please refer to the official github documentation: [Setting your username](https://help.github.com/articles/setting-your-username-in-git/#setting-your-git-username-for-a-single-repository), [Setting your email](https://help.github.com/articles/setting-your-commit-email-address-in-git/).
 
 ### Merge Latest Code
 
 After forking, the original repository's main branch may have new commits. To avoid conflicts between your PR and the main branch, you need to merge the main branch in a timely manner.
 
-- In your local spring-ai-alibaba directory, run `git remote add upstream https://github.com/spring-ai-alibaba/DataAgent` to add the original repository address to the remote stream.
-- In your local spring-ai-alibaba directory, run `git fetch upstream` to fetch the remote stream locally.
-- In your local spring-ai-alibaba directory, run `git checkout main` to switch to the main branch.
-- In your local spring-ai-alibaba directory, run `git rebase upstream/main` to rebase the latest code.
+- In your local DataSentry directory, run `git remote add upstream https://github.com/TouHouQing/DataSentry` to add the original repository address to the remote stream.
+- In your local DataSentry directory, run `git fetch upstream` to fetch the remote stream locally.
+- In your local DataSentry directory, run `git checkout main` to switch to the main branch.
+- In your local DataSentry directory, run `git rebase upstream/main` to rebase the latest code.
 
 ### Configure Spring AI Standard Code Format
 
@@ -75,4 +75,4 @@ Commit format: git commit -m "type(module): space followed by compliant commit m
 
 ### Submit PR
 
-Submit a PR, describe the changes and implemented features according to the `Pull request template`, and wait for code review and merge to become a Spring AI Alibaba Contributor and contribute to a better Spring AI Alibaba.
+Submit a PR, describe the changes and implemented features according to the `Pull request template`, and wait for code review and merge to become a DataSentry contributor and contribute to a better DataSentry.

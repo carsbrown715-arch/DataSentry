@@ -2,7 +2,7 @@
 
 # Quick Start
 
-This document will guide you through the installation, configuration, and first run of DataAgent.
+This document will guide you through the installation, configuration, and first run of DataSentry.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ This document will guide you through the installation, configuration, and first 
 
 You can get test tables and data from the project repository:
 
-Files are located in: `data-agent-management/src/main/resources/sql`, which contains 4 files:
+Files are located in: `datasentry-management/src/main/resources/sql`, which contains 4 files:
 - `schema.sql` - Table structure for features
 - `data.sql` - Data for features
 - `product_schema.sql` - Sample data table structure
@@ -26,24 +26,24 @@ Import the tables and data into your MySQL database.
 
 ```bash
 # Example: Import using MySQL command line
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/schema.sql
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/data.sql
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/product_schema.sql
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/product_data.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/schema.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/data.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/product_schema.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/product_data.sql
 ```
 
 ## 2. Configuration
 
 ### 2.1 Configure Management Database
 
-Configure your MySQL database connection in `data-agent-management/src/main/resources/application.yml`.
+Configure your MySQL database connection in `datasentry-management/src/main/resources/application.yml`.
 
 > Initialization Behavior: Auto table creation and sample data insertion is enabled by default (`spring.sql.init.mode: always`). For production environments, it's recommended to disable this to avoid sample data overwriting your business data.
 
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/saa_data_agent?useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&allowMultiQueries=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://127.0.0.1:3306/datasentry?useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&allowMultiQueries=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -189,18 +189,18 @@ Below is the ES schema structure. For other vector stores like Milvus, PG, etc.,
 
 ## 3. Start Management Backend
 
-In the `data-agent-management` directory, run the `DataAgentApplication.java` class.
+In the `datasentry-management` directory, run the `DataSentryApplication.java` class.
 
 ```bash
-cd data-agent-management
+cd datasentry-management
 ./mvnw spring-boot:run
 ```
 
-Or run `DataAgentApplication.java` directly in your IDE.
+Or run `DataSentryApplication.java` directly in your IDE.
 
 ## 4. Start Web Frontend
 
-Navigate to the `data-agent-frontend` directory
+Navigate to the `datasentry-frontend` directory
 
 ### 4.1 Install Dependencies
 
@@ -226,7 +226,7 @@ After successful startup, access http://localhost:3000
 
 ## 5. System Experience
 
-### 5.1 Creating and Configuring Data Agent
+### 5.1 Creating and Configuring a DataSentry Agent
 
 Visit http://localhost:3000 to see the current list of agents (there are four placeholder agents by default that are not connected to data; you can delete them and create new agents)
 
@@ -284,7 +284,7 @@ After success, you can click "Go to Run Interface" to use the agent for data que
 
 > Note: "Access API" is not fully implemented in the current version and is reserved for secondary development.
 
-### 5.2 Running the Data Agent
+### 5.2 Running the DataSentry Agent
 
 Run Interface
 

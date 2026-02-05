@@ -2,9 +2,9 @@
 
 ---
 
-# DataAgent Knowledge Configuration Best Practices Guide
+# DataSentry Knowledge Configuration Best Practices Guide
 
-In the DataAgent system, the AI's capability ceiling depends on the quality of "knowledge" it possesses. To enable the agent to accurately understand user natural language queries and convert them into correct SQL and analysis reports, we need to configure three types of knowledge in layers: **Semantic Model**, **Business Knowledge**, and **Agent Knowledge Base**.
+In the DataSentry system, the AI's capability ceiling depends on the quality of "knowledge" it possesses. To enable the agent to accurately understand user natural language queries and convert them into correct SQL and analysis reports, we need to configure three types of knowledge in layers: **Semantic Model**, **Business Knowledge**, and **Agent Knowledge Base**.
 
 ---
 
@@ -38,7 +38,7 @@ The configuration focus is on eliminating ambiguity in database fields. The sema
 
 ## II. Business Knowledge Configuration
 
-**Positioning**: This is DataAgent's **business logic dictionary**. It solves "what is...?" questions, used to define calculation formulas, proprietary terms, and business metrics. Note that the **business name in the semantic model** focuses on mapping to tables, but not all business terms will have a one-to-one correspondence with tables.
+**Positioning**: This is DataSentry's **business logic dictionary**. It solves "what is...?" questions, used to define calculation formulas, proprietary terms, and business metrics. Note that the **business name in the semantic model** focuses on mapping to tables, but not all business terms will have a one-to-one correspondence with tables.
 
 ### 1. Applicable Scenarios
 When users ask "What was last month's **GMV**?" or "What is the **high-value customer** ratio?", the LLM doesn't know the GMV formula nor the definition of high-value customers. This is when business knowledge recall (Recall) is needed.
@@ -59,7 +59,7 @@ When users ask "What was last month's **GMV**?" or "What is the **high-value cus
 
 ## III. Agent Knowledge Base Configuration
 
-**Positioning**: This is DataAgent's **external brain expansion** (RAG). Supports unstructured document uploads to provide background information, industry knowledge, SOPs, or historical cases.
+**Positioning**: This is DataSentry's **external brain expansion** (RAG). Supports unstructured document uploads to provide background information, industry knowledge, SOPs, or historical cases.
 
 ### 1. Knowledge Types and Uses
 Supports `Documents`, `Q&A Pairs`, etc.
@@ -85,7 +85,7 @@ This is the most efficient way to correct Agent's incorrect behavior (Few-Shot L
 
 ## IV. Knowledge Workflow Integration
 
-In a complete DataAgent run, how do these three layers of knowledge collaborate?
+In a complete DataSentry run, how do these three layers of knowledge collaborate?
 
 **Scenario**: User asks **"Please analyze the GMV trend in the East China region last month and generate a report."**
 

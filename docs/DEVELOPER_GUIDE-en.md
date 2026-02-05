@@ -2,7 +2,7 @@
 
 # Developer Guide
 
-Welcome to participate in the development of the DataAgent project! This document will help you understand how to contribute to the project.
+Welcome to participate in the development of the DataSentry project! This document will help you understand how to contribute to the project.
 
 ## Development Environment Setup
 
@@ -18,8 +18,8 @@ Welcome to participate in the development of the DataAgent project! This documen
 ### Clone Project
 
 ```bash
-git clone https://github.com/your-org/spring-ai-alibaba-data-agent.git
-cd spring-ai-alibaba-data-agent
+git clone https://github.com/TouHouQing/DataSentry.git
+cd DataSentry
 ```
 
 ### Backend Development Environment
@@ -30,11 +30,11 @@ cd spring-ai-alibaba-data-agent
 
 2. **Configure Database**
    - Create a MySQL database
-   - Modify the database configuration in `data-agent-management/src/main/resources/application.yml`
+   - Modify the database configuration in `datasentry-management/src/main/resources/application.yml`
 
 3. **Start Backend Service**
    ```bash
-   cd data-agent-management
+   cd datasentry-management
    ./mvnw spring-boot:run
    ```
 
@@ -42,7 +42,7 @@ cd spring-ai-alibaba-data-agent
 
 1. **Install Dependencies**
    ```bash
-   cd data-agent-frontend
+   cd datasentry-frontend
    npm install
    ```
 
@@ -141,26 +141,26 @@ public class AgentVectorStoreService {
 
 ## Development Configuration Manual
 
-All configuration items in this project are under the `spring.ai.alibaba.data-agent` prefix.
+All configuration items in this project are under the `spring.ai.alibaba.datasentry` prefix.
 
 ### 1. General Configuration
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
-| `spring.ai.alibaba.data-agent.llm-service-type` | LLM service type (STREAM/BLOCK) | STREAM |
-| `spring.ai.alibaba.data-agent.max-sql-retry-count` | SQL execution failure retry count | 10 |
-| `spring.ai.alibaba.data-agent.max-sql-optimize-count` | Maximum SQL optimization attempts | 10 |
-| `spring.ai.alibaba.data-agent.sql-score-threshold` | SQL optimization score threshold | 0.95 |
-| `spring.ai.alibaba.data-agent.maxturnhistory` | Maximum conversation turns to retain | 5 |
-| `spring.ai.alibaba.data-agent.maxplanlength` | Maximum plan length limit per planning | 2000 |
-| `spring.ai.alibaba.data-agent.max-columns-per-table` | Maximum estimated columns per table | 50 |
-| `spring.ai.alibaba.data-agent.fusion-strategy` | Multi-channel recall result fusion strategy | rrf |
-| `spring.ai.alibaba.data-agent.enable-sql-result-chart` | Enable SQL result chart judgment | true |
-| `spring.ai.alibaba.data-agent.enrich-sql-result-timeout` | SQL result chart generation timeout (ms) | 3000 |
+| `spring.ai.alibaba.datasentry.llm-service-type` | LLM service type (STREAM/BLOCK) | STREAM |
+| `spring.ai.alibaba.datasentry.max-sql-retry-count` | SQL execution failure retry count | 10 |
+| `spring.ai.alibaba.datasentry.max-sql-optimize-count` | Maximum SQL optimization attempts | 10 |
+| `spring.ai.alibaba.datasentry.sql-score-threshold` | SQL optimization score threshold | 0.95 |
+| `spring.ai.alibaba.datasentry.maxturnhistory` | Maximum conversation turns to retain | 5 |
+| `spring.ai.alibaba.datasentry.maxplanlength` | Maximum plan length limit per planning | 2000 |
+| `spring.ai.alibaba.datasentry.max-columns-per-table` | Maximum estimated columns per table | 50 |
+| `spring.ai.alibaba.datasentry.fusion-strategy` | Multi-channel recall result fusion strategy | rrf |
+| `spring.ai.alibaba.datasentry.enable-sql-result-chart` | Enable SQL result chart judgment | true |
+| `spring.ai.alibaba.datasentry.enrich-sql-result-timeout` | SQL result chart generation timeout (ms) | 3000 |
 
 ### 2. Embedding Batch Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.embedding-batch`
+Configuration prefix: `spring.ai.alibaba.datasentry.embedding-batch`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
@@ -171,7 +171,7 @@ Configuration prefix: `spring.ai.alibaba.data-agent.embedding-batch`
 
 ### 3. Vector Store Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.vector-store`
+Configuration prefix: `spring.ai.alibaba.datasentry.vector-store`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
@@ -282,7 +282,7 @@ Below is the Elasticsearch Schema structure. Other vector stores (like Milvus, P
 
 ### 4. Text Splitter Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.text-splitter`
+Configuration prefix: `spring.ai.alibaba.datasentry.text-splitter`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
@@ -296,13 +296,13 @@ Configuration prefix: `spring.ai.alibaba.data-agent.text-splitter`
 
 ### 5. Code Executor Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.code-executor`
+Configuration prefix: `spring.ai.alibaba.datasentry.code-executor`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
 | `code-pool-executor` | Executor type (DOCKER/LOCAL) | DOCKER (default is local in application.yml) |
 | `image-name` | Docker image name | continuumio/anaconda3:latest |
-| `container-name-prefix` | Container name prefix | nl2sql-python-exec- |
+| `container-name-prefix` | Container name prefix | datasentry-python-exec- |
 | `host` | Service host address | null |
 | `task-queue-size` | Task blocking queue size | 5 |
 | `core-container-num` | Maximum core container count | 2 |
@@ -316,7 +316,7 @@ Configuration prefix: `spring.ai.alibaba.data-agent.code-executor`
 
 ### 6. File Storage Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.file`
+Configuration prefix: `spring.ai.alibaba.datasentry.file`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
@@ -328,7 +328,7 @@ Configuration prefix: `spring.ai.alibaba.data-agent.file`
 
 ### 7. Alibaba Cloud OSS Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.file.oss`
+Configuration prefix: `spring.ai.alibaba.datasentry.file.oss`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
@@ -357,7 +357,7 @@ If you choose not to use Spring AI Alibaba Starter and instead manually import O
 
 ### 10. Report Resources Configuration
 
-Configuration prefix: `spring.ai.alibaba.data-agent.report-template`
+Configuration prefix: `spring.ai.alibaba.datasentry.report-template`
 
 | Configuration Item | Description | Default Value |
 |-------------------|-------------|---------------|
@@ -402,4 +402,4 @@ For detailed contribution guidelines, please refer to [CONTRIBUTING.md](../CONTR
 
 ---
 
-Thank you for contributing to the DataAgent project!
+Thank you for contributing to the DataSentry project!

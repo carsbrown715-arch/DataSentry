@@ -2,7 +2,7 @@
 
 # 开发者文档
 
-欢迎参与 DataAgent 项目的开发！本文档将帮助您了解如何为项目做出贡献。
+欢迎参与 DataSentry 项目的开发！本文档将帮助您了解如何为项目做出贡献。
 
 ## 🚀 开发环境搭建
 
@@ -18,8 +18,8 @@
 ### 克隆项目
 
 ```bash
-git clone https://github.com/your-org/spring-ai-alibaba-data-agent.git
-cd spring-ai-alibaba-data-agent
+git clone https://github.com/TouHouQing/DataSentry.git
+cd DataSentry
 ```
 
 ### 后端开发环境
@@ -30,11 +30,11 @@ cd spring-ai-alibaba-data-agent
 
 2. **配置数据库**
    - 创建 MySQL 数据库
-   - 修改 `data-agent-management/src/main/resources/application.yml` 中的数据库配置
+   - 修改 `datasentry-management/src/main/resources/application.yml` 中的数据库配置
 
 3. **启动后端服务**
    ```bash
-   cd data-agent-management
+   cd datasentry-management
    ./mvnw spring-boot:run
    ```
 
@@ -42,7 +42,7 @@ cd spring-ai-alibaba-data-agent
 
 1. **安装依赖**
    ```bash
-   cd data-agent-frontend
+   cd datasentry-frontend
    npm install
    ```
 
@@ -141,26 +141,26 @@ public class AgentVectorStoreService {
 
 ## ⚙️ 开发配置手册
 
-本项目的所有配置项均位于 `spring.ai.alibaba.data-agent` 前缀下。
+本项目的所有配置项均位于 `spring.ai.alibaba.datasentry` 前缀下。
 
 ### 1. 通用配置
 
 | 配置项                                                    | 说明 | 默认值    |
 |--------------------------------------------------------|------|--------|
-| `spring.ai.alibaba.data-agent.llm-service-type`        | LLM服务类型 (STREAM/BLOCK) | STREAM |
-| `spring.ai.alibaba.data-agent.max-sql-retry-count`     | SQL执行失败重试次数 | 10     |
-| `spring.ai.alibaba.data-agent.max-sql-optimize-count`  | SQL优化最多次数 | 10     |
-| `spring.ai.alibaba.data-agent.sql-score-threshold`     | SQL优化分数阈值 | 0.95   |
-| `spring.ai.alibaba.data-agent.maxturnhistory`          | 最多保留的对话轮数 | 5      |
-| `spring.ai.alibaba.data-agent.maxplanlength`           | 单次规划最大长度限制 | 2000   |
-| `spring.ai.alibaba.data-agent.max-columns-per-table`   | 每张表的最大预估列数 | 50     |
-| `spring.ai.alibaba.data-agent.fusion-strategy`         | 多路召回结果融合策略 | rrf    |
-| `spring.ai.alibaba.data-agent.enable-sql-result-chart` | 是否启用SQL执行结果图表判断 | true   |
-| `spring.ai.alibaba.data-agent.enrich-sql-result-timeout` | 执行SQL结果图表化超时时间，单位毫秒 | 3000   |
+| `spring.ai.alibaba.datasentry.llm-service-type`        | LLM服务类型 (STREAM/BLOCK) | STREAM |
+| `spring.ai.alibaba.datasentry.max-sql-retry-count`     | SQL执行失败重试次数 | 10     |
+| `spring.ai.alibaba.datasentry.max-sql-optimize-count`  | SQL优化最多次数 | 10     |
+| `spring.ai.alibaba.datasentry.sql-score-threshold`     | SQL优化分数阈值 | 0.95   |
+| `spring.ai.alibaba.datasentry.maxturnhistory`          | 最多保留的对话轮数 | 5      |
+| `spring.ai.alibaba.datasentry.maxplanlength`           | 单次规划最大长度限制 | 2000   |
+| `spring.ai.alibaba.datasentry.max-columns-per-table`   | 每张表的最大预估列数 | 50     |
+| `spring.ai.alibaba.datasentry.fusion-strategy`         | 多路召回结果融合策略 | rrf    |
+| `spring.ai.alibaba.datasentry.enable-sql-result-chart` | 是否启用SQL执行结果图表判断 | true   |
+| `spring.ai.alibaba.datasentry.enrich-sql-result-timeout` | 执行SQL结果图表化超时时间，单位毫秒 | 3000   |
 
 ### 2. 嵌入模型批处理策略 (Embedding Batch)
 
-配置前缀: `spring.ai.alibaba.data-agent.embedding-batch`
+配置前缀: `spring.ai.alibaba.datasentry.embedding-batch`
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -171,7 +171,7 @@ public class AgentVectorStoreService {
 
 ### 3. 向量库配置 (Vector Store)
 
-配置前缀: `spring.ai.alibaba.data-agent.vector-store`
+配置前缀: `spring.ai.alibaba.datasentry.vector-store`
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -282,7 +282,7 @@ public class AgentVectorStoreService {
 
 ### 4. 文本切分配置 (Text Splitter)
 
-配置前缀: `spring.ai.alibaba.data-agent.text-splitter`
+配置前缀: `spring.ai.alibaba.datasentry.text-splitter`
 
 #### 4.1 全局配置
 
@@ -292,7 +292,7 @@ public class AgentVectorStoreService {
 
 #### 4.2 TokenTextSplitter 配置 (token)
 
-配置前缀: `spring.ai.alibaba.data-agent.text-splitter.token`
+配置前缀: `spring.ai.alibaba.datasentry.text-splitter.token`
 
 基于 Token 数量的文本切分策略，适用于需要精确控制 token 数量的场景。
 
@@ -305,7 +305,7 @@ public class AgentVectorStoreService {
 
 #### 4.3 RecursiveCharacterTextSplitter 配置 (recursive)
 
-配置前缀: `spring.ai.alibaba.data-agent.text-splitter.recursive`
+配置前缀: `spring.ai.alibaba.datasentry.text-splitter.recursive`
 
 递归字符文本切分策略，按照字符顺序递归尝试不同的分隔符进行切分。
 
@@ -316,7 +316,7 @@ public class AgentVectorStoreService {
 
 #### 4.4 SentenceTextSplitter 配置 (sentence)
 
-配置前缀: `spring.ai.alibaba.data-agent.text-splitter.sentence`
+配置前缀: `spring.ai.alibaba.datasentry.text-splitter.sentence`
 
 基于句子的文本切分策略，按照句子边界进行切分，适合处理自然语言文本。
 
@@ -326,7 +326,7 @@ public class AgentVectorStoreService {
 
 #### 4.5 SemanticTextSplitter 配置 (semantic)
 
-配置前缀: `spring.ai.alibaba.data-agent.text-splitter.semantic`
+配置前缀: `spring.ai.alibaba.datasentry.text-splitter.semantic`
 
 基于语义相似度的文本切分策略，通过 Embedding 模型计算语义相似度来决定切分点，能够保持语义完整性。
 
@@ -338,7 +338,7 @@ public class AgentVectorStoreService {
 
 #### 4.6 ParagraphTextSplitter 配置 (paragraph)
 
-配置前缀: `spring.ai.alibaba.data-agent.text-splitter.paragraph`
+配置前缀: `spring.ai.alibaba.datasentry.text-splitter.paragraph`
 
 基于段落的文本切分策略，按照段落边界进行切分。
 
@@ -349,13 +349,13 @@ public class AgentVectorStoreService {
 
 ### 5. 代码执行器配置 (Code Executor)
 
-配置前缀: `spring.ai.alibaba.data-agent.code-executor`
+配置前缀: `spring.ai.alibaba.datasentry.code-executor`
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `code-pool-executor` | 执行器类型 (DOCKER/LOCAL) | DOCKER (application.yml中默认为local) |
 | `image-name` | Docker镜像名称 | continuumio/anaconda3:latest |
-| `container-name-prefix` | 容器名称前缀 | nl2sql-python-exec- |
+| `container-name-prefix` | 容器名称前缀 | datasentry-python-exec- |
 | `host` | 服务主机地址 | null |
 | `task-queue-size` | 任务阻塞队列大小 | 5 |
 | `core-container-num` | 核心容器数量最大值 | 2 |
@@ -369,7 +369,7 @@ public class AgentVectorStoreService {
 
 ### 6. 文件存储配置 (File Storage)
 
-配置前缀: `spring.ai.alibaba.data-agent.file`
+配置前缀: `spring.ai.alibaba.datasentry.file`
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -381,7 +381,7 @@ public class AgentVectorStoreService {
 
 ### 7. 阿里云 OSS 配置 (OSS Storage)
 
-配置前缀: `spring.ai.alibaba.data-agent.file.oss`
+配置前缀: `spring.ai.alibaba.datasentry.file.oss`
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -410,7 +410,7 @@ public class AgentVectorStoreService {
 
 ### 10. 报告资源配置 (Report Resources)
 
-配置前缀: `spring.ai.alibaba.data-agent.report-template`
+配置前缀: `spring.ai.alibaba.datasentry.report-template`
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
@@ -455,4 +455,4 @@ public class AgentVectorStoreService {
 
 ---
 
-感谢您对 DataAgent 项目的贡献！🎉
+感谢您对 DataSentry 项目的贡献！🎉

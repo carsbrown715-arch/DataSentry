@@ -1,0 +1,522 @@
+<template>
+  <BaseLayout>
+    <div class="review-workbench">
+      <main class="main-content">
+        <div class="content-header">
+          <div class="header-info">
+            <h1 class="content-title">人审工作台</h1>
+            <p class="content-subtitle">集中处理批量清理任务的审核与写回</p>
+          </div>
+          <div class="header-actions">
+            <el-button :icon="Refresh" size="large" @click="loadReviews">刷新</el-button>
+          </div>
+        </div>
+
+        <el-card class="filter-card">
+          <div class="filter-row">
+            <el-select
+              v-model="filters.status"
+              placeholder="状态筛选"
+              clearable
+              style="width: 160px"
+            >
+              <el-option label="待审核" value="PENDING" />
+              <el-option label="已通过" value="APPROVED" />
+              <el-option label="已拒绝" value="REJECTED" />
+              <el-option label="冲突" value="CONFLICT" />
+              <el-option label="已写回" value="WRITTEN" />
+              <el-option label="失败" value="FAILED" />
+            </el-select>
+            <el-input v-model="filters.jobRunId" placeholder="Job Run ID" style="width: 200px" />
+            <el-button type="primary" @click="loadReviews">查询</el-button>
+          </div>
+          <div class="bulk-row">
+            <el-button
+              type="success"
+              :disabled="selectedRows.length === 0"
+              @click="handleBatchApprove"
+            >
+              批量通过
+            </el-button>
+            <el-button
+              type="danger"
+              :disabled="selectedRows.length === 0"
+              @click="handleBatchReject"
+            >
+              批量拒绝
+            </el-button>
+            <el-divider direction="vertical" />
+            <el-button
+              type="success"
+              plain
+              :disabled="!filters.jobRunId"
+              @click="handleBatchAllApprove"
+            >
+              全量通过
+            </el-button>
+            <el-button
+              type="danger"
+              plain
+              :disabled="!filters.jobRunId"
+              @click="handleBatchAllReject"
+            >
+              全量拒绝
+            </el-button>
+          </div>
+        </el-card>
+
+        <el-card>
+          <el-table
+            :data="reviews"
+            style="width: 100%"
+            stripe
+            v-loading="loading"
+            @selection-change="handleSelectionChange"
+          >
+            <el-table-column type="selection" width="48" />
+            <el-table-column prop="id" label="ID" width="80" />
+            <el-table-column prop="jobRunId" label="Run ID" width="120" />
+            <el-table-column prop="tableName" label="表名" min-width="160" />
+            <el-table-column prop="columnName" label="字段" min-width="140" />
+            <el-table-column prop="verdict" label="判定" width="120" />
+            <el-table-column prop="actionSuggested" label="建议动作" width="140" />
+            <el-table-column label="状态" width="120">
+              <template #default="scope">
+                <el-tag :type="statusTag(scope.row.status)" size="small">
+                  {{ scope.row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="260" fixed="right">
+              <template #default="scope">
+                <el-button size="small" type="primary" @click="openDetail(scope.row)">
+                  详情
+                </el-button>
+                <el-button
+                  size="small"
+                  type="success"
+                  :disabled="scope.row.status !== 'PENDING'"
+                  @click="handleApprove(scope.row)"
+                >
+                  通过
+                </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  :disabled="scope.row.status !== 'PENDING'"
+                  @click="handleReject(scope.row)"
+                >
+                  拒绝
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </main>
+
+      <el-drawer v-model="detailVisible" size="48%" title="审核详情" :with-header="true">
+        <div v-if="currentTask" class="detail-body">
+          <div class="detail-meta">
+            <div>
+              <strong>表</strong>
+              <span>{{ currentTask.tableName }}</span>
+            </div>
+            <div>
+              <strong>字段</strong>
+              <span>{{ currentTask.columnName }}</span>
+            </div>
+            <div>
+              <strong>建议动作</strong>
+              <span>{{ currentTask.actionSuggested }}</span>
+            </div>
+          </div>
+          <div class="diff-grid">
+            <div class="diff-panel">
+              <h3>原文</h3>
+              <pre v-html="diffOriginal"></pre>
+            </div>
+            <div class="diff-panel">
+              <h3>脱敏后</h3>
+              <pre v-html="diffSanitized"></pre>
+            </div>
+          </div>
+        </div>
+      </el-drawer>
+    </div>
+  </BaseLayout>
+</template>
+
+<script setup>
+  import { computed, onMounted, ref } from 'vue';
+  import { ElMessage, ElMessageBox } from 'element-plus';
+  import { Refresh } from '@element-plus/icons-vue';
+  import cleaningService from '@/services/cleaning';
+  import BaseLayout from '@/layouts/BaseLayout.vue';
+
+  const reviews = ref([]);
+  const loading = ref(false);
+  const selectedRows = ref([]);
+  const detailVisible = ref(false);
+  const currentTask = ref(null);
+  const filters = ref({
+    status: 'PENDING',
+    jobRunId: '',
+  });
+
+  const statusTag = status => {
+    if (status === 'PENDING') return 'warning';
+    if (status === 'WRITTEN') return 'success';
+    if (status === 'REJECTED') return 'info';
+    if (status === 'CONFLICT') return 'danger';
+    if (status === 'FAILED') return 'danger';
+    return 'info';
+  };
+
+  const loadReviews = async () => {
+    loading.value = true;
+    try {
+      const params = {};
+      if (filters.value.status) params.status = filters.value.status;
+      if (filters.value.jobRunId) {
+        params.jobRunId = Number(filters.value.jobRunId);
+      }
+      reviews.value = await cleaningService.listReviews(params);
+    } catch (error) {
+      ElMessage.error('加载审核任务失败');
+    } finally {
+      loading.value = false;
+    }
+  };
+
+  const handleSelectionChange = rows => {
+    selectedRows.value = rows || [];
+  };
+
+  const openDetail = row => {
+    currentTask.value = row;
+    detailVisible.value = true;
+  };
+
+  const handleApprove = async row => {
+    try {
+      const reason = await promptReason('通过原因（可选）');
+      await cleaningService.approveReview(row.id, {
+        version: row.version,
+        reason,
+        reviewer: 'admin',
+      });
+      await loadReviews();
+      ElMessage.success('审核通过');
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('审核失败');
+      }
+    }
+  };
+
+  const handleReject = async row => {
+    try {
+      const reason = await promptReason('拒绝原因（可选）');
+      await cleaningService.rejectReview(row.id, {
+        version: row.version,
+        reason,
+        reviewer: 'admin',
+      });
+      await loadReviews();
+      ElMessage.success('已拒绝');
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('拒绝失败');
+      }
+    }
+  };
+
+  const handleBatchApprove = async () => {
+    try {
+      const reason = await promptReason('批量通过原因（可选）');
+      const result = await cleaningService.batchApprove({
+        taskIds: selectedRows.value.map(row => row.id),
+        reason,
+        reviewer: 'admin',
+      });
+      await loadReviews();
+      ElMessage.success(`批量通过完成，成功 ${result?.success || 0} 条`);
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('批量通过失败');
+      }
+    }
+  };
+
+  const handleBatchReject = async () => {
+    try {
+      const reason = await promptReason('批量拒绝原因（可选）');
+      const result = await cleaningService.batchReject({
+        taskIds: selectedRows.value.map(row => row.id),
+        reason,
+        reviewer: 'admin',
+      });
+      await loadReviews();
+      ElMessage.success(`批量拒绝完成，成功 ${result?.success || 0} 条`);
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('批量拒绝失败');
+      }
+    }
+  };
+
+  const handleBatchAllApprove = async () => {
+    if (!filters.value.jobRunId) {
+      return;
+    }
+    try {
+      await ElMessageBox.confirm('确认对该 Job Run 的全部待审记录执行通过？', '批量确认', {
+        type: 'warning',
+      });
+      const reason = await promptReason('批量通过原因（可选）');
+      const result = await cleaningService.batchApprove({
+        jobRunId: Number(filters.value.jobRunId),
+        filter: 'ALL_PENDING',
+        reason,
+        reviewer: 'admin',
+      });
+      await loadReviews();
+      ElMessage.success(`全量通过完成，成功 ${result?.success || 0} 条`);
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('全量通过失败');
+      }
+    }
+  };
+
+  const handleBatchAllReject = async () => {
+    if (!filters.value.jobRunId) {
+      return;
+    }
+    try {
+      await ElMessageBox.confirm('确认对该 Job Run 的全部待审记录执行拒绝？', '批量确认', {
+        type: 'warning',
+      });
+      const reason = await promptReason('批量拒绝原因（可选）');
+      const result = await cleaningService.batchReject({
+        jobRunId: Number(filters.value.jobRunId),
+        filter: 'ALL_PENDING',
+        reason,
+        reviewer: 'admin',
+      });
+      await loadReviews();
+      ElMessage.success(`全量拒绝完成，成功 ${result?.success || 0} 条`);
+    } catch (error) {
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('全量拒绝失败');
+      }
+    }
+  };
+
+  const promptReason = async title => {
+    const result = await ElMessageBox.prompt(title, '审核备注', {
+      confirmButtonText: '确认',
+      cancelButtonText: '取消',
+      inputPlaceholder: '输入原因或留空',
+    });
+    return result.value || '';
+  };
+
+  const parseJsonSafe = value => {
+    if (!value) {
+      return {};
+    }
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      return {};
+    }
+  };
+
+  const resolveDiffText = task => {
+    if (!task) {
+      return { original: '', sanitized: '' };
+    }
+    const beforeRow = parseJsonSafe(task.beforeRowJson);
+    const writeback = parseJsonSafe(task.writebackPayloadJson);
+    const columnName = task.columnName;
+    let original = beforeRow[columnName];
+    if (original === undefined) {
+      original = Object.values(beforeRow)[0];
+    }
+    let sanitized = writeback[columnName];
+    if (sanitized === undefined) {
+      sanitized = Object.values(writeback)[0];
+    }
+    if (sanitized === undefined || sanitized === null) {
+      sanitized = task.sanitizedPreview;
+    }
+    return {
+      original: original != null ? String(original) : '',
+      sanitized: sanitized != null ? String(sanitized) : '',
+    };
+  };
+
+  const buildDiffHtml = (original, sanitized, mode) => {
+    const escapeHtml = text =>
+      text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    if (!original && !sanitized) {
+      return '';
+    }
+    const prefixLength = (() => {
+      const min = Math.min(original.length, sanitized.length);
+      let i = 0;
+      while (i < min && original[i] === sanitized[i]) {
+        i++;
+      }
+      return i;
+    })();
+    const suffixLength = (() => {
+      const min = Math.min(original.length, sanitized.length);
+      let i = 0;
+      while (
+        i < min - prefixLength &&
+        original[original.length - 1 - i] === sanitized[sanitized.length - 1 - i]
+      ) {
+        i++;
+      }
+      return i;
+    })();
+    const originalMid = original.slice(prefixLength, original.length - suffixLength);
+    const sanitizedMid = sanitized.slice(prefixLength, sanitized.length - suffixLength);
+    if (mode === 'original') {
+      return (
+        escapeHtml(original.slice(0, prefixLength)) +
+        `<span class="diff-removed">${escapeHtml(originalMid)}</span>` +
+        escapeHtml(original.slice(original.length - suffixLength))
+      );
+    }
+    return (
+      escapeHtml(sanitized.slice(0, prefixLength)) +
+      `<span class="diff-added">${escapeHtml(sanitizedMid)}</span>` +
+      escapeHtml(sanitized.slice(sanitized.length - suffixLength))
+    );
+  };
+
+  const diffOriginal = computed(() => {
+    const diff = resolveDiffText(currentTask.value);
+    return buildDiffHtml(diff.original, diff.sanitized, 'original');
+  });
+
+  const diffSanitized = computed(() => {
+    const diff = resolveDiffText(currentTask.value);
+    return buildDiffHtml(diff.original, diff.sanitized, 'sanitized');
+  });
+
+  onMounted(() => {
+    loadReviews();
+  });
+</script>
+
+<style scoped>
+  .review-workbench {
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  .main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .content-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .content-subtitle {
+    margin-top: 0.5rem;
+    color: #64748b;
+  }
+
+  .filter-card {
+    margin-bottom: 1rem;
+  }
+
+  .filter-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .bulk-row {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .detail-body {
+    padding: 1rem 0;
+  }
+
+  .detail-meta {
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    color: #334155;
+  }
+
+  .detail-meta strong {
+    margin-right: 0.5rem;
+  }
+
+  .diff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+  }
+
+  .diff-panel {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 1rem;
+  }
+
+  .diff-panel h3 {
+    margin-top: 0;
+    font-size: 1rem;
+    color: #0f172a;
+  }
+
+  .diff-panel pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  }
+
+  :deep(.diff-removed) {
+    background: rgba(239, 68, 68, 0.2);
+    color: #b91c1c;
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+
+  :deep(.diff-added) {
+    background: rgba(34, 197, 94, 0.2);
+    color: #15803d;
+    padding: 0 4px;
+    border-radius: 4px;
+  }
+</style>

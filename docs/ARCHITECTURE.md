@@ -2,7 +2,7 @@
 
 # 架构设计
 
-本文档详细介绍 DataAgent 的系统架构、核心能力和技术实现。
+本文档详细介绍 DataSentry 的系统架构、核心能力和技术实现。
 
 ## 📐 总体架构图
 
@@ -10,7 +10,7 @@
 %%{init: {"theme": "base", "flowchart": {"curve": "basis", "nodeSpacing": 35, "rankSpacing": 45}, "themeVariables": {"lineColor": "#475569", "primaryTextColor": "#1F2937"}}}%%
 flowchart LR
   subgraph Clients[Clients]
-    UserUI[data-agent-frontend UI]
+    UserUI[DataSentry UI]
     AdminUI[Admin Console]
     MCPClient[MCP Client]
   end
@@ -20,7 +20,7 @@ flowchart LR
     SSE[SSE Stream]
   end
 
-  subgraph Management[data-agent-management Spring Boot]
+  subgraph Management[DataSentry Backend]
     GraphCtl[GraphController]
     AgentCtl[AgentController]
     PromptCtl[PromptConfigController]
@@ -258,7 +258,7 @@ sequenceDiagram
 
 #### 说明要点
 
-- **配置入口**: `/api/prompt-config/*`，数据表 `user_prompt_config`
+- **配置入口**: `/api/datasentry/prompt-config/*`，数据表 `user_prompt_config`
 - **作用范围**: 支持按 `agentId` 绑定或全局配置（`agentId` 为空）
 - **Prompt 类型**: `report-generator`、`planner`、`sql-generator`、`python-generator`、`rewrite`
 - **自动优化方式**: `ReportGeneratorNode` 拉取启用配置（按 `priority` 与 `display_order` 排序），通过 `PromptHelper.buildReportGeneratorPromptWithOptimization` 拼接"优化要求"
@@ -327,7 +327,7 @@ sequenceDiagram
 - **查询重写**: `EvidenceRecallNode` 调用 LLM 生成独立检索问题
 - **召回通道**: `AgentVectorStoreService` 执行向量检索；可选混合检索（向量+关键词，`AbstractHybridRetrievalStrategy`）
 - **文档类型**: 业务知识 + 智能体知识，按元数据过滤并合并为 evidence 注入后续 prompt
-- **关键配置**: `spring.ai.alibaba.data-agent.vector-store.enable-hybrid-search` 及相似度/TopK 等参数
+- **关键配置**: `spring.ai.alibaba.datasentry.vector-store.enable-hybrid-search` 及相似度/TopK 等参数
 
 #### 架构图
 
@@ -456,7 +456,7 @@ sequenceDiagram
 - **流式输出**: `GraphController` SSE + `GraphServiceImpl` 流式处理
 - **文本标记**: `TextType` 在流中标记 SQL/JSON/HTML/Markdown，前端据此渲染
 - **多轮对话**: `MultiTurnContextManager` 记录"用户问题+规划结果"，注入到后续请求
-- **模式切换**: `spring.ai.alibaba.data-agent.llm-service-type` 支持 `STREAM/BLOCK`
+- **模式切换**: `spring.ai.alibaba.datasentry.llm-service-type` 支持 `STREAM/BLOCK`
 
 #### 架构图
 
@@ -657,7 +657,7 @@ sequenceDiagram
 
 - **代码生成**: `PythonGenerateNode` 根据计划与 SQL 结果生成 Python
 - **代码执行**: `PythonExecuteNode` 使用 `CodePoolExecutorService`（Docker/Local/AI 模拟）
-- **执行配置**: `spring.ai.alibaba.data-agent.code-executor.*`（默认 Docker 镜像 `continuumio/anaconda3:latest`）
+- **执行配置**: `spring.ai.alibaba.datasentry.code-executor.*`（默认 Docker 镜像 `continuumio/anaconda3:latest`）
 - **结果回传**: 执行结果写回 `PYTHON_EXECUTE_NODE_OUTPUT`，`PythonAnalyzeNode` 汇总后写入 `SQL_EXECUTE_NODE_OUTPUT`，用于最终报告
 
 #### 架构图

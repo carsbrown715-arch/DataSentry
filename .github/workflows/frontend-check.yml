@@ -35,24 +35,24 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: data-agent-frontend/package-lock.json
+          cache-dependency-path: datasentry-frontend/package-lock.json
       - name: Install dependencies
         run: |
-          cd data-agent-frontend
+          cd datasentry-frontend
           npm ci
       - name: Build project
         run: |
-          cd data-agent-frontend
+          cd datasentry-frontend
           npm run build
       - name: ESLint check
         run: |
-          cd data-agent-frontend
+          cd datasentry-frontend
           npm run lint:check
       - name: Prettier format check
         run: |
-          cd data-agent-frontend
+          cd datasentry-frontend
           npm run format:check
       - name: Unused code check
         run: |
-          cd data-agent-frontend
+          cd datasentry-frontend
           npm run unused

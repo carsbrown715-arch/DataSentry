@@ -16,7 +16,7 @@ services:
   # MySQL 服务
   mysql-data:
     image: mysql:8.0
-    container_name: data-agent-mysql-datasource
+    container_name: datasentry-mysql-datasource
     restart: always
     ports:
       - "13306:3306"
@@ -34,7 +34,7 @@ services:
   # PostgreSQL 服务
   postgres-data:
     image: postgres:15
-    container_name: data-agent-postgres-datasource
+    container_name: datasentry-postgres-datasource
     restart: always
     ports:
       - "15432:5432"
@@ -43,6 +43,7 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - ./config/postgres:/docker-entrypoint-initdb.d
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s

@@ -2,7 +2,7 @@
 
 # 高级功能使用
 
-本文档介绍 DataAgent 的高级功能和自定义配置选项。
+本文档介绍 DataSentry 的高级功能和自定义配置选项。
 
 ## 🔑 访问 API（API Key 调用）
 
@@ -21,7 +21,7 @@
 #### 创建会话
 
 ```bash
-curl -X POST "http://127.0.0.1:3000/api/agent/<agentId>/sessions" \
+curl -X POST "http://127.0.0.1:3000/api/datasentry/agent/<agentId>/sessions" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: <your_api_key>" \
   -d '{"title":"demo"}'
@@ -30,7 +30,7 @@ curl -X POST "http://127.0.0.1:3000/api/agent/<agentId>/sessions" \
 #### 发送消息
 
 ```bash
-curl -X POST "http://127.0.0.1:3000/api/sessions/<sessionId>/messages" \
+curl -X POST "http://127.0.0.1:3000/api/datasentry/sessions/<sessionId>/messages" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: <your_api_key>" \
   -d '{"role":"user","content":"给我一个示例","messageType":"text"}'
@@ -73,7 +73,7 @@ public class ApiKeyAuthInterceptor implements HandlerInterceptor {
 
 ## 🔌 MCP服务器
 
-DataAgent 支持作为 MCP (Model Context Protocol) 服务器对外提供服务。
+DataSentry 支持作为 MCP (Model Context Protocol) 服务器对外提供服务。
 
 ### 配置说明
 
@@ -206,7 +206,7 @@ npx @modelcontextprotocol/inspector http://localhost:8065/mcp/connection
 - 多表 JOIN 查询准确率下降
 - 复杂业务查询失败率高
 
-DataAgent 创新性地实现了**逻辑外键配置功能**,允许用户手动定义表间关系,显著提升了多表查询的准确性。
+DataSentry 创新性地实现了**逻辑外键配置功能**,允许用户手动定义表间关系,显著提升了多表查询的准确性。
 
 ### 业务场景
 
@@ -396,7 +396,7 @@ WHERE u.name = '张三'
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         code-executor:
           type: docker
           docker:
@@ -412,13 +412,13 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         code-executor:
           type: local
           local:
             python-path: /usr/bin/python3
             timeout: 300000
-            work-dir: /tmp/dataagent
+            work-dir: /tmp/datasentry
 ```
 
 ### AI 模拟执行器
@@ -429,7 +429,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         code-executor:
           type: ai-simulation
 ```
@@ -442,7 +442,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         llm-service-type: STREAM  # STREAM 或 BLOCK
 ```
 
@@ -455,7 +455,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         multi-turn:
           enabled: true
           max-history: 10  # 最大历史轮数
@@ -468,7 +468,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         plan-executor:
           max-retry: 3  # 最大重试次数
           timeout: 600000  # 10分钟超时

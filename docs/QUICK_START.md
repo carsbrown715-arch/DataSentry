@@ -2,7 +2,7 @@
 
 # 快速开始
 
-本文档将指导您完成 DataAgent 的安装、配置和首次运行。
+本文档将指导您完成 DataSentry 的安装、配置和首次运行。
 
 ## 📋 环境要求
 
@@ -16,7 +16,7 @@
 
 可以在项目仓库获取测试表和数据：
 
-文件在：`data-agent-management/src/main/resources/sql`，里面有4个文件：
+文件在：`datasentry-management/src/main/resources/sql`，里面有4个文件：
 - `schema.sql` - 功能相关的表结构
 - `data.sql` - 功能相关的数据
 - `product_schema.sql` - 模拟数据表结构
@@ -26,24 +26,24 @@
 
 ```bash
 # 示例：使用 MySQL 命令行导入
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/schema.sql
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/data.sql
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/product_schema.sql
-mysql -u root -p your_database < data-agent-management/src/main/resources/sql/product_data.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/schema.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/data.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/product_schema.sql
+mysql -u root -p your_database < datasentry-management/src/main/resources/sql/product_data.sql
 ```
 
 ## ⚙️ 2. 配置
 
 ### 2.1 配置management数据库
 
-在`data-agent-management/src/main/resources/application.yml`中配置你的MySQL数据库连接信息。
+在`datasentry-management/src/main/resources/application.yml`中配置你的MySQL数据库连接信息。
 
 > 初始化行为说明：默认开启自动创建表并插入示例数据（`spring.sql.init.mode: always`）。生产环境建议关闭，避免示例数据回填覆盖你的业务数据。
 
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/saa_data_agent?useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&allowMultiQueries=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://127.0.0.1:3306/datasentry?useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&transformedBitIsBoolean=true&allowMultiQueries=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USERNAME:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -189,18 +189,18 @@ spring:
 
 ## 🚀 3. 启动管理端
 
-在`data-agent-management`目录下，运行 `DataAgentApplication.java` 类。
+在`datasentry-management`目录下，运行 `DataSentryApplication.java` 类。
 
 ```bash
-cd data-agent-management
+cd datasentry-management
 ./mvnw spring-boot:run
 ```
 
-或者在IDE中直接运行 `DataAgentApplication.java`。
+或者在IDE中直接运行 `DataSentryApplication.java`。
 
 ## 🌐 4. 启动WEB页面
 
-进入 `data-agent-frontend` 目录
+进入 `datasentry-frontend` 目录
 
 ### 4.1 安装依赖
 

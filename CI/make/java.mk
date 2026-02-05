@@ -14,33 +14,41 @@
 
 ##@ Java
 
+MVN ?= mvn
+MVND_CONNECT_TIMEOUT ?= 30000
+MVN_ARGS ?=
+
+ifeq ($(MVN),mvnd)
+MVN_ARGS += -Dmvnd.connectTimeout=$(MVND_CONNECT_TIMEOUT)
+endif
+
 .PHONY: test
 test: ## Run tests
 	@$(LOG_TARGET)
-	mvnd test
+	$(MVN) $(MVN_ARGS) test
 
 # Separate build and test to speed up execution
 .PHONY: build
 build: ## Build the project
 	@$(LOG_TARGET)
-	mvnd -Dmvnd.connectTimeout=30000 -B package --file pom.xml -DskipTests=true
+	$(MVN) $(MVN_ARGS) -B package --file pom.xml -DskipTests=true
 
 .PHONY: format-fix
 format-fix: ## Format the code
 	@$(LOG_TARGET)
-	mvnd -Dmvnd.connectTimeout=30000 spring-javaformat:apply
+	$(MVN) $(MVN_ARGS) spring-javaformat:apply
 
 .PHONY: format-check
 format-check: ## Format Check the code
 	@$(LOG_TARGET)
-	mvnd -Dmvnd.connectTimeout=30000 spring-javaformat:validate
+	$(MVN) $(MVN_ARGS) spring-javaformat:validate
 
 .PHONY: spotless-apply
 spotless-apply: ## Run spotless and apply changes
 	@$(LOG_TARGET)
-	mvnd -Dmvnd.connectTimeout=30000 spotless:apply
+	$(MVN) $(MVN_ARGS) spotless:apply
 
 .PHONY: checkstyle-check
 checkstyle-check: ## Checkstyle Check the code and output to target/checkstyle-report.xml
 	@$(LOG_TARGET)
-	mvnd -Dmvnd.connectTimeout=30000 -Dcheckstyle.skip=false -Dcheckstyle.output.file=checkstyle-report.xml checkstyle:check
+	$(MVN) $(MVN_ARGS) -Dcheckstyle.skip=false -Dcheckstyle.output.file=checkstyle-report.xml checkstyle:check

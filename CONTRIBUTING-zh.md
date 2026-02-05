@@ -2,15 +2,15 @@
 
 ## 如何贡献
 
-## 感谢你为 Spring AI Alibaba-DateAgent 贡献！
+## 感谢你为 DataSentry 贡献！
 
-DateAgent 从开源建设以来，受到了很多社区同学的关注。社区的每一个 Issue ，每一个 PR，都是对整个项目的帮助，都在为建设更好用的 Spring AI 添砖加瓦。
+DataSentry 从开源建设以来，受到了很多社区同学的关注。社区的每一个 Issue ，每一个 PR，都是对整个项目的帮助，都在为建设更好用的 DataSentry 添砖加瓦。
 
 我们真心地感谢为这个项目提出过 Issue 和 PR 的开发者。我们希望有更多社区的开发者加入进来，一起把项目做好。
 
 ## 如何贡献
 
-在贡献代码之前，请您稍微花一些时间了解为 Spring AI Alibaba 贡献代码的流程。
+在贡献代码之前，请您稍微花一些时间了解为 DataSentry 贡献代码的流程。
 
 ### 贡献什么？
 
@@ -20,32 +20,32 @@ DateAgent 从开源建设以来，受到了很多社区同学的关注。社区�
 
 ### 从哪里入手？
 
-如果您是初次贡献，可以先从 [good first issue](https://github.com/spring-ai-alibaba/DataAgent/labels/good%20first%20issue) 和 [help wanted](https://github.com/spring-ai-alibaba/DataAgent/labels/help%20wanted) 中认领一个比较简单的任务。
+如果您是初次贡献，可以先从 [good first issue](https://github.com/TouHouQing/DataSentry/labels/good%20first%20issue) 和 [help wanted](https://github.com/TouHouQing/DataSentry/labels/help%20wanted) 中认领一个比较简单的任务。
 
 ### Fork 仓库，并将其 Clone 到本地
 
-- 点击 [本项目](https://github.com/spring-ai-alibaba/DataAgent) 右上角的 `Fork` 图标 将 alibaba/spring-ai-alibaba  fork 到自己的空间。
-- 将自己账号下的 spring-ai-alibaba 仓库 clone 到本地，例如我的账号的 `chickenlj`，那就是执行 `git clone https://github.com/chickenl/DataAgen.git` 进行 clone 操作。
+- 点击 [本项目](https://github.com/TouHouQing/DataSentry) 右上角的 `Fork` 图标将仓库 fork 到自己的空间。
+- 将自己账号下的 DataSentry 仓库 clone 到本地，例如我的账号的 `chickenlj`，那就是执行 `git clone https://github.com/chickenlj/DataSentry.git` 进行 clone 操作。
 
 ### 配置 Github 信息
 
 - 在自己的机器执行 `git config --list` ，查看 git 的全局用户名和邮箱。
 - 检查显示的 user.name 和 user.email 是不是与自己 github 的用户名和邮箱相匹配。
-- 如果公司内部有自己的 gitlab 或者使用了其他商业化的 gitlab，则可能会出现不匹配的情况。这时候，你需要为 spring-ai-alibaba 项目单独设置用户名和邮箱。
+- 如果公司内部有自己的 gitlab 或者使用了其他商业化的 gitlab，则可能会出现不匹配的情况。这时候，你需要为 DataSentry 项目单独设置用户名和邮箱。
 - 设置用户名和邮箱的方式请参考 github 官方文档，[设置用户名](https://help.github.com/articles/setting-your-username-in-git/#setting-your-git-username-for-a-single-repository)，[设置邮箱](https://help.github.com/articles/setting-your-commit-email-address-in-git/)。
 
 ### Merge 最新代码
 
 fork 出来的代码后，原仓库 main 分支可能出现了新的提交，这时候为了避免提交的 PR 和 Master 中的提交出现冲突，需要及时 merge main 分支。
 
-- 在你本机的 spring-ai-alibaba 目录下，执行 `git remote add upstream https://github.com/spring-ai-alibaba/DataAgent` 将原始仓库地址添加到 remote stream 中。
-- 在你本机的 spring-ai-alibaba 目录下，执行 `git fetch upstream` 将 remote stream fetch 到本地。
-- 在你本机的 spring-ai-alibaba 目录下，执行 `git checkout main` 切换到 master 分支。
-- 在你本机的 spring-ai-alibaba 目录下，执行 `git rebase upstream/main` rebase 最新代码。
+- 在你本机的 DataSentry 目录下，执行 `git remote add upstream https://github.com/TouHouQing/DataSentry` 将原始仓库地址添加到 remote stream 中。
+- 在你本机的 DataSentry 目录下，执行 `git fetch upstream` 将 remote stream fetch 到本地。
+- 在你本机的 DataSentry 目录下，执行 `git checkout main` 切换到 master 分支。
+- 在你本机的 DataSentry 目录下，执行 `git rebase upstream/main` rebase 最新代码。
 
 ### 配置 Spring AI 标准的代码格式
 
-Spring AI Alibaba 作为 Spring AI 的实现之一，在代码规范方面直接沿用了 Spring AI 项目规范，在正式开始之前请参考相关代码格式规范说明，提交代码前需要先配置好代码格式规范。
+DataSentry 基于 Spring AI Alibaba，在代码规范方面沿用了 Spring AI 项目规范，在正式开始之前请参考相关代码格式规范说明，提交代码前需要先配置好代码格式规范。
 
 ### 开发
 
@@ -57,7 +57,7 @@ Spring AI Alibaba 作为 Spring AI 的实现之一，在代码规范方面直接
 
 ### 本地Checkstyle
 
-为了减少一些不必要的代码风格问题，Spring AI Alibaba 提供了本地 Checkstyle 检查功能。可以在项目根目录下执行 `mvn checkstyle:check` 命令来检查代码风格是否符合规范。
+为了减少一些不必要的代码风格问题，DataSentry 提供了本地 Checkstyle 检查功能。可以在项目根目录下执行 `mvn checkstyle:check` 命令来检查代码风格是否符合规范。
 
 ### 删除未使用的导入
 
@@ -75,4 +75,4 @@ Commit 规范: git commit -m "类型(模块): 空格 符合规范的提交信息
 
 ### 提交 PR
 
-提交 PR，根据 `Pull request template` 写明修改点和实现的功能，等待 code review 和 合并，成为 Spring AI Alibaba Contributor，为更好用的 Spring AI Alibaba 做出贡献。
+提交 PR，根据 `Pull request template` 写明修改点和实现的功能，等待 code review 和 合并，成为 DataSentry Contributor，为更好用的 DataSentry 做出贡献。

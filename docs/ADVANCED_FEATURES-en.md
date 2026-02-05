@@ -2,7 +2,7 @@
 
 # Advanced Features
 
-This document introduces the advanced features and custom configuration options of DataAgent.
+This document introduces the advanced features and custom configuration options of DataSentry.
 
 ## Access API (API Key Calls)
 
@@ -21,7 +21,7 @@ This document introduces the advanced features and custom configuration options 
 #### Create Session
 
 ```bash
-curl -X POST "http://127.0.0.1:3000/api/agent/<agentId>/sessions" \
+curl -X POST "http://127.0.0.1:3000/api/datasentry/agent/<agentId>/sessions" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: <your_api_key>" \
   -d '{"title":"demo"}'
@@ -30,7 +30,7 @@ curl -X POST "http://127.0.0.1:3000/api/agent/<agentId>/sessions" \
 #### Send Message
 
 ```bash
-curl -X POST "http://127.0.0.1:3000/api/sessions/<sessionId>/messages" \
+curl -X POST "http://127.0.0.1:3000/api/datasentry/sessions/<sessionId>/messages" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: <your_api_key>" \
   -d '{"role":"user","content":"Give me an example","messageType":"text"}'
@@ -73,7 +73,7 @@ public class ApiKeyAuthInterceptor implements HandlerInterceptor {
 
 ## MCP Server
 
-DataAgent supports serving as an MCP (Model Context Protocol) server to provide external services.
+DataSentry supports serving as an MCP (Model Context Protocol) server to provide external services.
 
 ### Configuration Description
 
@@ -207,7 +207,7 @@ In actual production environments, many databases don't set physical foreign key
 - Multi-table JOIN query accuracy decreases
 - Complex business query failure rate increases
 
-DataAgent innovatively implements **logical foreign key configuration functionality**, allowing users to manually define table relationships, significantly improving the accuracy of multi-table queries.
+DataSentry innovatively implements **logical foreign key configuration functionality**, allowing users to manually define table relationships, significantly improving the accuracy of multi-table queries.
 
 ### Business Scenarios
 
@@ -397,7 +397,7 @@ The system supports three Python executors:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         code-executor:
           type: docker
           docker:
@@ -413,13 +413,13 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         code-executor:
           type: local
           local:
             python-path: /usr/bin/python3
             timeout: 300000
-            work-dir: /tmp/dataagent
+            work-dir: /tmp/datasentry
 ```
 
 ### AI Simulation Executor
@@ -430,7 +430,7 @@ Used for testing environments, doesn't actually execute Python code, but simulat
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         code-executor:
           type: ai-simulation
 ```
@@ -443,7 +443,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         llm-service-type: STREAM  # STREAM or BLOCK
 ```
 
@@ -456,7 +456,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         multi-turn:
           enabled: true
           max-history: 10  # Maximum history turns
@@ -469,7 +469,7 @@ spring:
 spring:
   ai:
     alibaba:
-      data-agent:
+      datasentry:
         plan-executor:
           max-retry: 3  # Maximum retry count
           timeout: 600000  # 10 minute timeout

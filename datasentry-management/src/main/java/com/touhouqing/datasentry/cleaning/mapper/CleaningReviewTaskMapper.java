@@ -1,0 +1,40 @@
+package com.touhouqing.datasentry.cleaning.mapper;
+
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.touhouqing.datasentry.cleaning.model.CleaningReviewTask;
+import org.apache.ibatis.annotations.Mapper;
+
+import java.time.LocalDateTime;
+
+@Mapper
+public interface CleaningReviewTaskMapper extends BaseMapper<CleaningReviewTask> {
+
+	default int updateStatusWithVersion(Long id, Integer version, String status, String reviewer, String reason,
+			LocalDateTime now) {
+		LambdaUpdateWrapper<CleaningReviewTask> wrapper = new LambdaUpdateWrapper<CleaningReviewTask>()
+			.eq(CleaningReviewTask::getId, id)
+			.eq(CleaningReviewTask::getVersion, version)
+			.eq(CleaningReviewTask::getStatus, "PENDING")
+			.set(CleaningReviewTask::getStatus, status)
+			.set(CleaningReviewTask::getReviewer, reviewer)
+			.set(CleaningReviewTask::getReviewReason, reason)
+			.set(CleaningReviewTask::getUpdatedTime, now)
+			.setSql("version = version + 1");
+		return update(null, wrapper);
+	}
+
+	default int updateStatusIfMatch(Long id, String fromStatus, String toStatus, String reviewer, String reason,
+			LocalDateTime now) {
+		LambdaUpdateWrapper<CleaningReviewTask> wrapper = new LambdaUpdateWrapper<CleaningReviewTask>()
+			.eq(CleaningReviewTask::getId, id)
+			.eq(CleaningReviewTask::getStatus, fromStatus)
+			.set(CleaningReviewTask::getStatus, toStatus)
+			.set(CleaningReviewTask::getReviewer, reviewer)
+			.set(CleaningReviewTask::getReviewReason, reason)
+			.set(CleaningReviewTask::getUpdatedTime, now)
+			.setSql("version = version + 1");
+		return update(null, wrapper);
+	}
+
+}

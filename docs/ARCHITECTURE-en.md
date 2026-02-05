@@ -2,7 +2,7 @@
 
 # Architecture Design
 
-This document provides a detailed introduction to DataAgent's system architecture, core capabilities, and technical implementation.
+This document provides a detailed introduction to DataSentry's system architecture, core capabilities, and technical implementation.
 
 ## Overall Architecture Diagram
 
@@ -10,7 +10,7 @@ This document provides a detailed introduction to DataAgent's system architectur
 %%{init: {"theme": "base", "flowchart": {"curve": "basis", "nodeSpacing": 35, "rankSpacing": 45}, "themeVariables": {"lineColor": "#475569", "primaryTextColor": "#1F2937"}}}%%
 flowchart LR
   subgraph Clients[Clients]
-    UserUI[data-agent-frontend UI]
+    UserUI[DataSentry UI]
     AdminUI[Admin Console]
     MCPClient[MCP Client]
   end
@@ -20,7 +20,7 @@ flowchart LR
     SSE[SSE Stream]
   end
 
-  subgraph Management[data-agent-management Spring Boot]
+  subgraph Management[DataSentry Backend]
     GraphCtl[GraphController]
     AgentCtl[AgentController]
     PromptCtl[PromptConfigController]
@@ -258,7 +258,7 @@ sequenceDiagram
 
 #### Key Points
 
-- **Configuration Entry**: `/api/prompt-config/*`, data table `user_prompt_config`
+- **Configuration Entry**: `/api/datasentry/prompt-config/*`, data table `user_prompt_config`
 - **Scope**: Supports binding by `agentId` or global configuration (`agentId` is null)
 - **Prompt Types**: `report-generator`, `planner`, `sql-generator`, `python-generator`, `rewrite`
 - **Auto-Optimization Method**: `ReportGeneratorNode` fetches enabled configurations (sorted by `priority` and `display_order`), concatenates "optimization requirements" through `PromptHelper.buildReportGeneratorPromptWithOptimization`
@@ -327,7 +327,7 @@ sequenceDiagram
 - **Query Rewriting**: `EvidenceRecallNode` calls LLM to generate independent retrieval questions
 - **Recall Channels**: `AgentVectorStoreService` performs vector retrieval; optional hybrid retrieval (vector + keyword, `AbstractHybridRetrievalStrategy`)
 - **Document Types**: Business knowledge + Agent knowledge, filtered by metadata and merged as evidence injected into subsequent prompts
-- **Key Configuration**: `spring.ai.alibaba.data-agent.vector-store.enable-hybrid-search` and similarity/TopK parameters
+- **Key Configuration**: `spring.ai.alibaba.datasentry.vector-store.enable-hybrid-search` and similarity/TopK parameters
 
 #### Architecture Diagram
 
@@ -457,7 +457,7 @@ sequenceDiagram
 - **Streaming Output**: `GraphController` SSE + `GraphServiceImpl` streaming processing
 - **Text Markers**: `TextType` marks SQL/JSON/HTML/Markdown in the stream, frontend renders accordingly
 - **Multi-turn Conversation**: `MultiTurnContextManager` records "user question + planning results", injected into subsequent requests
-- **Mode Switching**: `spring.ai.alibaba.data-agent.llm-service-type` supports `STREAM/BLOCK`
+- **Mode Switching**: `spring.ai.alibaba.datasentry.llm-service-type` supports `STREAM/BLOCK`
 
 #### Architecture Diagram
 
@@ -658,7 +658,7 @@ sequenceDiagram
 
 - **Code Generation**: `PythonGenerateNode` generates Python based on plan and SQL results
 - **Code Execution**: `PythonExecuteNode` uses `CodePoolExecutorService` (Docker/Local/AI simulation)
-- **Execution Configuration**: `spring.ai.alibaba.data-agent.code-executor.*` (default Docker image `continuumio/anaconda3:latest`)
+- **Execution Configuration**: `spring.ai.alibaba.datasentry.code-executor.*` (default Docker image `continuumio/anaconda3:latest`)
 - **Result Return**: Execution results are written back to `PYTHON_EXECUTE_NODE_OUTPUT`, `PythonAnalyzeNode` summarizes and writes to `SQL_EXECUTE_NODE_OUTPUT` for final report
 
 #### Architecture Diagram

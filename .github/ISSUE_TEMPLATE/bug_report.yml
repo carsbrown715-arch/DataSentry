@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 name: 🐛 Bug Report
-description: Problems and issues with code of Spring AI Alibaba DataAgent 🤔.
+description: Problems and issues with code of DataSentry 🤔.
 title: "[BUG] "
 body:
   - type: checkboxes
@@ -52,8 +52,8 @@ body:
       label: Environment
       description: |
         examples:
-          - **Spring AI Alibaba DataAgent version(s)**: 0.1.0-SNAPSHOT?
-      value: "Spring AI Alibaba DataAgent version(s):"
+          - **DataSentry version(s)**: 1.0.0-SNAPSHOT?
+      value: "DataSentry version(s):"
       render: markdown
     validations:
       required: false
