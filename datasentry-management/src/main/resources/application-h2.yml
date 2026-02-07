@@ -74,3 +74,4 @@ logging:
     com.touhouqing.datasentry.workflow.node: debug
     com.alibaba.cloud.ai.mapper: debug
     org.springframework.jdbc: debug
+    org.springframework.jdbc.datasource.DataSourceUtils: info

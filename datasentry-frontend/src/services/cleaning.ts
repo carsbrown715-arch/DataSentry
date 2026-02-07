@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse } from './common';
+import type { ApiResponse, PageResponse } from './common';
 
 export interface CleaningPolicyRuleItem {
   ruleId: number;
@@ -92,6 +92,17 @@ export interface CleaningReviewBatchResult {
   stale: number;
 }
 
+export interface CleaningBinding {
+  id?: number;
+  agentId: number;
+  bindingType?: string;
+  scene?: string | null;
+  policyId: number;
+  enabled?: number;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
 export interface CleaningJobCreateRequest {
   agentId: number;
   datasourceId: number;
@@ -105,6 +116,7 @@ export interface CleaningJobCreateRequest {
   mode?: string;
   writebackMode?: string;
   reviewPolicy?: string;
+  backupPolicy?: Record<string, unknown>;
   writebackMapping?: Record<string, unknown>;
   batchSize?: number;
   budgetEnabled?: number;
@@ -130,6 +142,7 @@ export interface CleaningJob {
   mode?: string;
   writebackMode?: string;
   reviewPolicy?: string;
+  backupPolicyJson?: string;
   writebackMappingJson?: string;
   batchSize?: number;
   budgetEnabled?: number;
@@ -286,6 +299,32 @@ export interface CleaningOptionItem {
   sampleConfig?: Record<string, unknown>;
 }
 
+export interface CleaningRuleTypeField {
+  name: string;
+  labelZh?: string;
+  type?: string;
+  required?: boolean;
+  defaultValue?: unknown;
+  placeholder?: string;
+  help?: string;
+  options?: string[];
+}
+
+export interface CleaningRuleTypeSchema {
+  ruleType: string;
+  title?: string;
+  description?: string;
+  fields?: CleaningRuleTypeField[];
+}
+
+export interface CleaningSeverityGuidanceItem {
+  level?: string;
+  min?: number;
+  max?: number;
+  labelZh?: string;
+  description?: string;
+}
+
 export interface CleaningThresholdItem {
   code: string;
   labelZh?: string;
@@ -305,6 +344,11 @@ export interface CleaningOptionMetaView {
   verdicts?: CleaningOptionItem[];
   targetConfigTypes?: CleaningOptionItem[];
   thresholdGuidance?: CleaningThresholdItem[];
+  ruleTypeSchemas?: Record<string, CleaningRuleTypeSchema>;
+  ruleTypeUiBehavior?: Record<string, Record<string, boolean>>;
+  severityGuidance?: CleaningSeverityGuidanceItem[];
+  riskConfirmations?: Record<string, string>;
+  regexTemplates?: CleaningOptionItem[];
   jsonConfigTemplates?: Record<string, unknown>;
   fieldHelp?: Record<string, string>;
 }
@@ -341,6 +385,18 @@ class CleaningService {
   async createJob(payload: CleaningJobCreateRequest): Promise<CleaningJob | null> {
     const response = await axios.post<ApiResponse<CleaningJob>>(`${API_BASE_URL}/jobs`, payload);
     return response.data.data || null;
+  }
+
+  async updateJob(jobId: number, payload: CleaningJobCreateRequest): Promise<CleaningJob | null> {
+    const response = await axios.put<ApiResponse<CleaningJob>>(
+      `${API_BASE_URL}/jobs/${jobId}`,
+      payload,
+    );
+    return response.data.data || null;
+  }
+
+  async deleteJob(jobId: number): Promise<void> {
+    await axios.delete<ApiResponse<void>>(`${API_BASE_URL}/jobs/${jobId}`);
   }
 
   async getJob(jobId: number): Promise<CleaningJob | null> {
@@ -448,6 +504,25 @@ class CleaningService {
   async getOptionMeta(): Promise<CleaningOptionMetaView | null> {
     const response = await axios.get<ApiResponse<CleaningOptionMetaView>>(
       `${API_BASE_URL}/meta/options`,
+    );
+    return response.data.data || null;
+  }
+
+  async getOnlineDefaultBinding(agentId: number): Promise<CleaningBinding | null> {
+    const response = await axios.get<ApiResponse<CleaningBinding>>(
+      `${API_BASE_URL}/bindings/online-default/${agentId}`,
+    );
+    return response.data.data || null;
+  }
+
+  async upsertOnlineDefaultBinding(payload: {
+    agentId: number;
+    policyId: number;
+    enabled?: number;
+  }): Promise<CleaningBinding | null> {
+    const response = await axios.put<ApiResponse<CleaningBinding>>(
+      `${API_BASE_URL}/bindings/online-default`,
+      payload,
     );
     return response.data.data || null;
   }
@@ -566,11 +641,16 @@ class CleaningService {
     status?: string;
     jobRunId?: number;
     agentId?: number;
-  }): Promise<CleaningReviewTask[]> {
-    const response = await axios.get<ApiResponse<CleaningReviewTask[]>>(`${API_BASE_URL}/reviews`, {
-      params,
-    });
-    return response.data.data || [];
+    pageNum?: number;
+    pageSize?: number;
+  }): Promise<PageResponse<CleaningReviewTask[]>> {
+    const response = await axios.get<PageResponse<CleaningReviewTask[]>>(
+      `${API_BASE_URL}/reviews`,
+      {
+        params,
+      },
+    );
+    return response.data;
   }
 
   async approveReview(

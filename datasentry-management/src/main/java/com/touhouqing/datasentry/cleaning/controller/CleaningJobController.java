@@ -27,6 +27,19 @@ public class CleaningJobController {
 		return ResponseEntity.ok(ApiResponse.success("success", job));
 	}
 
+	@PutMapping("/jobs/{jobId}")
+	public ResponseEntity<ApiResponse<CleaningJob>> updateJob(@PathVariable Long jobId,
+			@RequestBody @Valid CleaningJobCreateRequest request) {
+		CleaningJob job = jobService.updateJob(jobId, request);
+		return ResponseEntity.ok(ApiResponse.success("success", job));
+	}
+
+	@DeleteMapping("/jobs/{jobId}")
+	public ResponseEntity<ApiResponse<Void>> deleteJob(@PathVariable Long jobId) {
+		jobService.deleteJob(jobId);
+		return ResponseEntity.ok(ApiResponse.success("success"));
+	}
+
 	@GetMapping("/jobs/{jobId}")
 	public ResponseEntity<ApiResponse<CleaningJob>> getJob(@PathVariable Long jobId) {
 		CleaningJob job = jobService.getJob(jobId);

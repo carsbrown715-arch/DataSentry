@@ -33,6 +33,70 @@ public class RegexDetectorTest {
 		int expectedStart = text.indexOf("13800138000");
 		assertEquals(expectedStart, finding.getStart());
 		assertEquals(expectedStart + 11, finding.getEnd());
+		assertEquals("[REDACTED]", finding.getReplacement());
+	}
+
+	@Test
+	public void detectsPhoneNumberWhenPatternIsOverEscaped() {
+		RegexDetector detector = new RegexDetector();
+		CleaningRule rule = CleaningRule.builder()
+			.id(2L)
+			.name("手机号检测-过度转义")
+			.ruleType("REGEX")
+			.category("PII_PHONE")
+			.severity(0.9)
+			.enabled(1)
+			.configJson("{\"pattern\":\"1[3-9]\\\\\\\\d{9}\",\"flags\":\"CASE_INSENSITIVE\"}")
+			.build();
+		String text = "13800001002";
+
+		List<Finding> findings = detector.detect(text, rule);
+
+		assertEquals(1, findings.size());
+		assertEquals(0, findings.get(0).getStart());
+		assertEquals(11, findings.get(0).getEnd());
+		assertEquals("[REDACTED]", findings.get(0).getReplacement());
+	}
+
+	@Test
+	public void detectsWithCustomMaskReplacement() {
+		RegexDetector detector = new RegexDetector();
+		CleaningRule rule = CleaningRule.builder()
+			.id(3L)
+			.name("手机号检测-自定义替换")
+			.ruleType("REGEX")
+			.category("PII_PHONE")
+			.severity(0.9)
+			.enabled(1)
+			.configJson(
+					"{\"pattern\":\"1[3-9]\\\\d{9}\",\"flags\":\"CASE_INSENSITIVE\",\"maskMode\":\"PLACEHOLDER\",\"maskText\":\"***\"}")
+			.build();
+		String text = "13800001002";
+
+		List<Finding> findings = detector.detect(text, rule);
+
+		assertEquals(1, findings.size());
+		assertEquals("***", findings.get(0).getReplacement());
+	}
+
+	@Test
+	public void detectsWithDeleteMaskMode() {
+		RegexDetector detector = new RegexDetector();
+		CleaningRule rule = CleaningRule.builder()
+			.id(4L)
+			.name("手机号检测-删除命中")
+			.ruleType("REGEX")
+			.category("PII_PHONE")
+			.severity(0.9)
+			.enabled(1)
+			.configJson("{\"pattern\":\"1[3-9]\\\\d{9}\",\"flags\":\"CASE_INSENSITIVE\",\"maskMode\":\"DELETE\"}")
+			.build();
+		String text = "13800001002";
+
+		List<Finding> findings = detector.detect(text, rule);
+
+		assertEquals(1, findings.size());
+		assertEquals("", findings.get(0).getReplacement());
 	}
 
 }

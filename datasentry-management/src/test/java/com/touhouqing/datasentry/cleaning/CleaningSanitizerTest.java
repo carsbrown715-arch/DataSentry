@@ -34,4 +34,28 @@ public class CleaningSanitizerTest {
 		assertEquals(text, sanitized);
 	}
 
+	@Test
+	public void usesCustomReplacementWhenProvided() {
+		String text = "call 13800138000";
+		int phoneStart = text.indexOf("13800138000");
+		List<Finding> findings = List
+			.of(Finding.builder().start(phoneStart).end(phoneStart + 11).replacement("***").build());
+
+		String sanitized = CleaningSanitizer.sanitize(text, findings);
+
+		assertEquals("call ***", sanitized);
+	}
+
+	@Test
+	public void deletesMatchedContentWhenReplacementIsEmpty() {
+		String text = "call 13800138000 now";
+		int phoneStart = text.indexOf("13800138000");
+		List<Finding> findings = List
+			.of(Finding.builder().start(phoneStart).end(phoneStart + 11).replacement("").build());
+
+		String sanitized = CleaningSanitizer.sanitize(text, findings);
+
+		assertEquals("call  now", sanitized);
+	}
+
 }

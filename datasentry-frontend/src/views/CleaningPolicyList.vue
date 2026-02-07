@@ -13,6 +13,7 @@
               新增策略
             </el-button>
             <el-button :icon="Refresh" size="large" @click="loadAll">刷新</el-button>
+            <el-button size="large" @click="openBindingDialog">在线默认绑定</el-button>
           </div>
         </div>
 
@@ -23,8 +24,8 @@
           class="intro-alert"
           :title="
             isBeginnerMode
-              ? '新手模式：默认显示中文说明，帮助快速理解术语。'
-              : '专家模式：显示完整枚举值与底层配置。'
+              ? '新手模式：默认使用结构化表单，降低 JSON 配置门槛。'
+              : '专家模式：显示完整枚举值，并保留高级 JSON 编辑能力。'
           "
         />
 
@@ -112,7 +113,7 @@
       <el-dialog
         v-model="policyDialogVisible"
         :title="policyDialogTitle"
-        width="860px"
+        width="920px"
         :close-on-click-modal="false"
       >
         <el-form :model="policyForm" label-width="120px" label-position="left">
@@ -223,18 +224,75 @@
       </el-dialog>
 
       <el-dialog
-        v-model="ruleDialogVisible"
-        :title="ruleDialogTitle"
-        width="680px"
+        v-model="bindingDialogVisible"
+        title="在线默认策略绑定"
+        width="640px"
         :close-on-click-modal="false"
       >
-        <el-form :model="ruleForm" label-width="110px" label-position="left">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="inline-alert"
+          title="用于实时 check/sanitize 调用的默认策略。不设置时会走系统兜底策略。"
+        />
+        <el-form :model="bindingForm" label-width="130px" label-position="left">
+          <el-form-item label="智能体">
+            <el-select
+              v-model="bindingForm.agentId"
+              filterable
+              clearable
+              style="width: 100%"
+              @change="onBindingAgentChange"
+            >
+              <el-option
+                v-for="agent in bindingAgents"
+                :key="agent.id"
+                :label="agent.name || `Agent-${agent.id}`"
+                :value="agent.id"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="默认策略">
+            <el-select v-model="bindingForm.policyId" filterable clearable style="width: 100%">
+              <el-option
+                v-for="policy in policies"
+                :key="policy.id"
+                :label="`${policy.name} (#${policy.id})`"
+                :value="policy.id"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="启用状态">
+            <el-switch v-model="bindingForm.enabled" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="bindingDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="saveBinding">保存绑定</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="ruleDialogVisible"
+        :title="ruleDialogTitle"
+        width="760px"
+        :close-on-click-modal="false"
+      >
+        <el-form :model="ruleForm" label-width="120px" label-position="left">
           <el-form-item label="规则名称">
             <el-input v-model="ruleForm.name" placeholder="请输入规则名称" />
           </el-form-item>
 
           <el-form-item label="规则类型">
-            <el-select v-model="ruleForm.ruleType" placeholder="请选择" style="width: 100%">
+            <el-select
+              v-model="ruleForm.ruleType"
+              placeholder="请选择"
+              style="width: 100%"
+              @change="onRuleTypeChange"
+            >
               <el-option
                 v-for="item in ruleTypeOptions"
                 :key="item.code"
@@ -242,17 +300,14 @@
                 :value="item.code"
               />
             </el-select>
+            <div class="field-help">{{ selectedRuleTypeHelp }}</div>
           </el-form-item>
 
           <el-form-item label="规则类别">
             <el-select
-              v-model="ruleForm.category"
-              filterable
-              allow-create
-              clearable
-              default-first-option
-              placeholder="请选择或输入规则类别"
+              v-model="ruleForm.categoryPreset"
               style="width: 100%"
+              placeholder="请选择规则类别"
             >
               <el-option
                 v-for="item in ruleCategoryOptions"
@@ -260,23 +315,125 @@
                 :label="formatOptionLabel(item)"
                 :value="item.code"
               />
+              <el-option label="自定义类别" value="__CUSTOM__" />
             </el-select>
           </el-form-item>
 
+          <el-form-item v-if="ruleForm.categoryPreset === '__CUSTOM__'" label="自定义类别">
+            <el-input v-model="ruleForm.customCategory" placeholder="请输入自定义规则类别" />
+          </el-form-item>
+
           <el-form-item label="严重度">
-            <el-input-number v-model="ruleForm.severity" :min="0" :max="1" :step="0.05" />
+            <div class="severity-editor">
+              <el-input-number v-model="ruleForm.severity" :min="0" :max="1" :step="0.05" />
+              <el-slider v-model="ruleForm.severity" :min="0" :max="1" :step="0.01" />
+              <span class="severity-percent">{{ severityPercentLabel }}</span>
+            </div>
+            <div class="field-help">{{ severityHint }}</div>
           </el-form-item>
 
           <el-form-item label="启用状态">
             <el-switch v-model="ruleForm.enabled" />
           </el-form-item>
 
-          <el-form-item label="配置 JSON">
+          <template v-if="ruleForm.ruleType === 'REGEX'">
+            <el-divider content-position="left">正则配置（结构化）</el-divider>
+
+            <el-form-item label="快速模板">
+              <el-select
+                v-model="ruleForm.regexTemplateCode"
+                clearable
+                filterable
+                style="width: 100%"
+                placeholder="选择模板后自动填充 pattern/flags"
+                @change="applyRegexTemplate"
+              >
+                <el-option
+                  v-for="item in regexTemplateOptions"
+                  :key="item.code"
+                  :label="formatOptionLabel(item)"
+                  :value="item.code"
+                />
+              </el-select>
+              <div class="field-help">{{ regexTemplateHint }}</div>
+            </el-form-item>
+
+            <el-form-item label="pattern">
+              <el-input
+                v-model="ruleForm.regexPattern"
+                placeholder="例如：\b1[3-9]\d{9}\b"
+                @blur="normalizeRegexPatternInput"
+              />
+              <div class="field-help">{{ getFieldHelp('policy.regex.pattern') }}</div>
+              <div v-if="regexPatternNormalizationHint" class="field-help field-help-warning">
+                {{ regexPatternNormalizationHint }}
+              </div>
+            </el-form-item>
+
+            <el-form-item label="flags">
+              <el-select
+                v-model="ruleForm.regexFlags"
+                multiple
+                clearable
+                filterable
+                style="width: 100%"
+                placeholder="可多选"
+              >
+                <el-option
+                  v-for="flag in regexFlagOptions"
+                  :key="flag"
+                  :label="flag"
+                  :value="flag"
+                />
+              </el-select>
+              <div class="field-help">{{ getFieldHelp('policy.regex.flags') }}</div>
+            </el-form-item>
+
+            <el-form-item label="脱敏方式">
+              <el-radio-group v-model="ruleForm.regexMaskMode" @change="onRegexMaskModeChange">
+                <el-radio-button
+                  v-for="mode in regexMaskModeOptions"
+                  :key="mode"
+                  :label="mode"
+                  :value="mode"
+                >
+                  {{ mode === 'DELETE' ? '删除命中字符' : '固定文本替换' }}
+                </el-radio-button>
+              </el-radio-group>
+              <div class="field-help">{{ getFieldHelp('policy.regex.maskMode') }}</div>
+            </el-form-item>
+
+            <el-form-item v-if="ruleForm.regexMaskMode !== 'DELETE'" label="替换文本">
+              <el-input
+                v-model="ruleForm.regexMaskText"
+                placeholder="例如：*** 或 [PHONE]，留空默认 [REDACTED]"
+              />
+              <div class="field-help">{{ getFieldHelp('policy.regex.maskText') }}</div>
+            </el-form-item>
+          </template>
+
+          <el-alert
+            v-else-if="isBeginnerMode && !ruleForm.showAdvancedConfig"
+            type="info"
+            :closable="false"
+            show-icon
+            title="当前规则类型无必填配置项，如需自定义参数可展开高级 JSON。"
+            class="inline-alert"
+          />
+
+          <el-form-item v-if="allowAdvancedConfig" label="高级配置">
+            <el-button text type="primary" @click="toggleAdvancedConfig">
+              {{ ruleForm.showAdvancedConfig ? '收起高级 JSON' : '展开高级 JSON' }}
+            </el-button>
+            <div class="field-help">{{ getFieldHelp('policy.configJson') }}</div>
+          </el-form-item>
+
+          <el-form-item v-if="allowAdvancedConfig && ruleForm.showAdvancedConfig" label="配置 JSON">
             <el-input
               v-model="ruleForm.configJson"
               type="textarea"
-              :rows="5"
-              placeholder='例如: {"pattern":"\\\\d{11}","flags":"CASE_INSENSITIVE"}'
+              :rows="6"
+              placeholder='例如: {"pattern":"\\d{11}","flags":"CASE_INSENSITIVE","maskMode":"PLACEHOLDER","maskText":"[REDACTED]"}'
             />
             <div class="config-toolbar">
               <el-button size="small" @click="fillRuleConfigTemplate">按类型填充模板</el-button>
@@ -299,6 +456,7 @@
   import { Plus, Refresh } from '@element-plus/icons-vue';
   import cleaningMetaService from '@/services/cleaningMeta';
   import cleaningService from '@/services/cleaning';
+  import agentService from '@/services/agent';
   import {
     buildOptionLabel,
     mergeOptionsWithFallback,
@@ -314,6 +472,7 @@
   const rules = ref([]);
   const loadingPolicies = ref(false);
   const loadingRules = ref(false);
+  const bindingAgents = ref([]);
 
   const uiMode = ref(readCleaningUiMode());
   const optionMeta = ref(mergeOptionsWithFallback(null));
@@ -335,15 +494,29 @@
   });
   const ruleSelections = ref([]);
 
+  const bindingDialogVisible = ref(false);
+  const bindingForm = reactive({
+    agentId: undefined,
+    policyId: undefined,
+    enabled: true,
+  });
+
   const ruleDialogVisible = ref(false);
   const ruleDialogTitle = ref('新增规则');
   const ruleForm = reactive({
     id: null,
     name: '',
     ruleType: 'REGEX',
-    category: '',
+    categoryPreset: '',
+    customCategory: '',
     severity: 0.8,
     enabled: true,
+    regexTemplateCode: '',
+    regexPattern: '',
+    regexFlags: ['CASE_INSENSITIVE'],
+    regexMaskMode: 'PLACEHOLDER',
+    regexMaskText: '[REDACTED]',
+    showAdvancedConfig: false,
     configJson: '',
   });
 
@@ -352,6 +525,9 @@
   const ruleTypeOptions = computed(() => optionMeta.value.ruleTypes || []);
   const ruleCategoryOptions = computed(() => optionMeta.value.ruleCategories || []);
   const thresholdGuidance = computed(() => optionMeta.value.thresholdGuidance || []);
+  const severityGuidance = computed(() => optionMeta.value.severityGuidance || []);
+  const regexTemplateOptions = computed(() => optionMeta.value.regexTemplates || []);
+  const riskConfirmations = computed(() => optionMeta.value.riskConfirmations || {});
 
   const selectedDefaultActionHint = computed(() => {
     const matched = defaultActionOptions.value.find(item => item.code === policyForm.defaultAction);
@@ -360,7 +536,86 @@
     }
     const effect = matched.effect ? `；作用：${matched.effect}` : '';
     const risk = matched.riskLevel ? `；风险：${matched.riskLevel}` : '';
-    return `${matched.labelZh || matched.code}：${matched.description || ''}${effect}${risk}`;
+    const recommended = matched.recommendedFor ? `；适用：${matched.recommendedFor}` : '';
+    return `${matched.labelZh || matched.code}：${matched.description || ''}${effect}${risk}${recommended}`;
+  });
+
+  const ruleTypeSchema = computed(() => optionMeta.value.ruleTypeSchemas?.[ruleForm.ruleType]);
+
+  const ruleTypeBehavior = computed(() => {
+    const fallback = {
+      showStructuredConfig: ruleForm.ruleType === 'REGEX',
+      showAdvancedJson: true,
+    };
+    return optionMeta.value.ruleTypeUiBehavior?.[ruleForm.ruleType] || fallback;
+  });
+
+  const allowAdvancedConfig = computed(() => ruleTypeBehavior.value.showAdvancedJson !== false);
+
+  const regexFlagOptions = computed(() => {
+    const fields = ruleTypeSchema.value?.fields || [];
+    const flagField = fields.find(item => item.name === 'flags');
+    if (flagField?.options?.length) {
+      return flagField.options;
+    }
+    return ['CASE_INSENSITIVE', 'MULTILINE', 'DOTALL'];
+  });
+
+  const regexMaskModeOptions = computed(() => {
+    const fields = ruleTypeSchema.value?.fields || [];
+    const maskModeField = fields.find(item => item.name === 'maskMode');
+    if (maskModeField?.options?.length) {
+      return maskModeField.options;
+    }
+    return ['PLACEHOLDER', 'DELETE'];
+  });
+
+  const selectedRuleTypeHelp = computed(() => {
+    const schemaDescription = ruleTypeSchema.value?.description;
+    if (schemaDescription) {
+      return schemaDescription;
+    }
+    return ruleTypeOptions.value.find(item => item.code === ruleForm.ruleType)?.description || '';
+  });
+
+  const regexTemplateHint = computed(() => {
+    if (!ruleForm.regexTemplateCode) {
+      return '可选择模板快速生成 pattern 与 flags，再按业务微调。';
+    }
+    const template = regexTemplateOptions.value.find(
+      item => item.code === ruleForm.regexTemplateCode,
+    );
+    if (!template) {
+      return '可选择模板快速生成 pattern 与 flags，再按业务微调。';
+    }
+    const example = template.effect ? `；示例：${template.effect}` : '';
+    return `${template.description || ''}${example}`;
+  });
+
+  const regexPatternNormalizationHint = computed(() => {
+    if (ruleForm.ruleType !== 'REGEX') {
+      return '';
+    }
+    const original = String(ruleForm.regexPattern || '');
+    if (!original) {
+      return '';
+    }
+    const normalized = normalizeRegexPatternText(original);
+    if (normalized === original) {
+      return '';
+    }
+    return `检测到双反斜杠写法，保存时会自动规范化为：${normalized}`;
+  });
+
+  const severityPercentLabel = computed(() => `${Math.round((ruleForm.severity || 0) * 100)} 分`);
+
+  const severityHint = computed(() => {
+    const value = Number(ruleForm.severity || 0);
+    const matched = severityGuidance.value.find(item => value >= item.min && value <= item.max);
+    if (matched) {
+      return `${matched.labelZh}（${matched.min} - ${matched.max}）：${matched.description || ''}`;
+    }
+    return getFieldHelp('policy.severity');
   });
 
   const ruleTypeConfigHint = computed(() => {
@@ -388,6 +643,8 @@
 
   const formatRuleCategory = code => buildOptionLabel(code, ruleCategoryOptions.value);
 
+  const getFieldHelp = key => optionMeta.value.fieldHelp?.[key] || '';
+
   const getThresholdHint = thresholdCode => {
     const matched = thresholdGuidance.value.find(item => item.code === thresholdCode);
     if (!matched) {
@@ -396,7 +653,110 @@
     return `${matched.description || ''}（推荐 ${matched.recommendedRange || '-'}）`;
   };
 
+  const normalizeFlags = flags => {
+    if (!flags) {
+      return [];
+    }
+    if (Array.isArray(flags)) {
+      return flags.map(item => String(item).trim()).filter(Boolean);
+    }
+    return String(flags)
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  };
+
+  const normalizeRegexPatternText = pattern => {
+    if (!pattern) {
+      return '';
+    }
+    return String(pattern)
+      .replace(/\\\\([dDwWsSbB])/g, '\\$1')
+      .trim();
+  };
+
+  const normalizeRegexMaskMode = mode => {
+    const normalized = String(mode || '')
+      .trim()
+      .toUpperCase();
+    if (normalized === 'DELETE') {
+      return 'DELETE';
+    }
+    return 'PLACEHOLDER';
+  };
+
+  const onRegexMaskModeChange = nextMode => {
+    ruleForm.regexMaskMode = normalizeRegexMaskMode(nextMode);
+    if (ruleForm.regexMaskMode === 'DELETE') {
+      ruleForm.regexMaskText = '';
+    } else if (!String(ruleForm.regexMaskText || '').trim()) {
+      ruleForm.regexMaskText = '[REDACTED]';
+    }
+    if (ruleForm.showAdvancedConfig) {
+      syncConfigJsonFromStructured();
+    }
+  };
+
+  const normalizeRegexPatternInput = () => {
+    if (ruleForm.ruleType !== 'REGEX') {
+      return;
+    }
+    const original = String(ruleForm.regexPattern || '');
+    const normalized = normalizeRegexPatternText(original);
+    if (normalized === original) {
+      return;
+    }
+    ruleForm.regexPattern = normalized;
+    if (ruleForm.showAdvancedConfig) {
+      syncConfigJsonFromStructured();
+    }
+    ElMessage.info('已自动规范化正则 pattern（将双反斜杠转换为单反斜杠写法）');
+  };
+
+  const syncConfigJsonFromStructured = () => {
+    if (ruleForm.ruleType !== 'REGEX') {
+      ruleForm.configJson = '{}';
+      return;
+    }
+    const config = {
+      pattern: ruleForm.regexPattern || '',
+      flags: ruleForm.regexFlags.join(','),
+      maskMode: ruleForm.regexMaskMode,
+      ...(ruleForm.regexMaskMode === 'DELETE'
+        ? {}
+        : { maskText: String(ruleForm.regexMaskText || '').trim() || '[REDACTED]' }),
+    };
+    ruleForm.configJson = JSON.stringify(config, null, 2);
+  };
+
+  const applyRegexTemplate = code => {
+    if (!code) {
+      return;
+    }
+    const template = regexTemplateOptions.value.find(item => item.code === code);
+    const config = template?.sampleConfig;
+    if (!config || typeof config !== 'object') {
+      ElMessage.warning('模板缺少配置内容');
+      return;
+    }
+    ruleForm.regexPattern = String(config.pattern || '').trim();
+    ruleForm.regexFlags = normalizeFlags(config.flags || 'CASE_INSENSITIVE');
+    ruleForm.regexMaskMode = normalizeRegexMaskMode(config.maskMode);
+    ruleForm.regexMaskText =
+      ruleForm.regexMaskMode === 'DELETE'
+        ? ''
+        : String(config.maskText || '[REDACTED]').trim() || '[REDACTED]';
+    if (ruleForm.showAdvancedConfig) {
+      syncConfigJsonFromStructured();
+    }
+  };
+
   const fillRuleConfigTemplate = () => {
+    if (ruleForm.ruleType === 'REGEX' && ruleForm.regexTemplateCode) {
+      applyRegexTemplate(ruleForm.regexTemplateCode);
+      ElMessage.success('已按正则模板填充');
+      return;
+    }
     const templates = optionMeta.value.jsonConfigTemplates || {};
     const template = templates[ruleForm.ruleType];
     if (!template || typeof template !== 'object') {
@@ -406,6 +766,25 @@
     }
     ruleForm.configJson = JSON.stringify(template, null, 2);
     ElMessage.success('已按规则类型填充模板');
+  };
+
+  const toggleAdvancedConfig = () => {
+    ruleForm.showAdvancedConfig = !ruleForm.showAdvancedConfig;
+    if (ruleForm.showAdvancedConfig && !ruleForm.configJson) {
+      syncConfigJsonFromStructured();
+    }
+  };
+
+  const parseJsonSafe = value => {
+    if (!value || typeof value !== 'string') {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch (error) {
+      return {};
+    }
   };
 
   const loadOptionMeta = async () => {
@@ -439,17 +818,6 @@
     await Promise.all([loadOptionMeta(), loadPolicies(), loadRules()]);
   };
 
-  const parseJsonSafe = value => {
-    if (!value) {
-      return {};
-    }
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      return {};
-    }
-  };
-
   const openPolicyDialog = policy => {
     const isEdit = !!policy;
     policyDialogTitle.value = isEdit ? '编辑策略' : '新增策略';
@@ -481,13 +849,37 @@
     policyDialogVisible.value = true;
   };
 
+  const ensurePolicyRiskConfirmed = async () => {
+    const riskMessage = riskConfirmations.value[policyForm.defaultAction];
+    if (!riskMessage) {
+      return;
+    }
+    await ElMessageBox.confirm(riskMessage, '高风险动作确认', {
+      type: 'warning',
+      confirmButtonText: '继续保存',
+      cancelButtonText: '返回修改',
+    });
+  };
+
   const savePolicy = async () => {
     if (!policyForm.name) {
       ElMessage.warning('请输入策略名称');
       return;
     }
 
+    if (policyForm.reviewThreshold > policyForm.blockThreshold) {
+      ElMessage.error('Review 阈值不能大于 Block 阈值');
+      return;
+    }
+
+    if (!policyForm.shadowEnabled && policyForm.shadowSampleRatio > 0) {
+      ElMessage.warning('Shadow 未启用，采样率将自动重置为 0');
+      policyForm.shadowSampleRatio = 0;
+    }
+
     try {
+      await ensurePolicyRiskConfirmed();
+
       const payload = {
         name: policyForm.name,
         description: policyForm.description,
@@ -522,7 +914,9 @@
       await loadPolicies();
       ElMessage.success('策略已保存');
     } catch (error) {
-      ElMessage.error('保存策略失败');
+      if (error !== 'cancel' && error !== 'close') {
+        ElMessage.error('保存策略失败');
+      }
     }
   };
 
@@ -541,40 +935,160 @@
     }
   };
 
+  const onRuleTypeChange = nextType => {
+    if (nextType === 'REGEX') {
+      if (!ruleForm.regexPattern) {
+        const template = optionMeta.value.jsonConfigTemplates?.REGEX;
+        ruleForm.regexPattern = String(template?.pattern || '\\d{11}');
+      }
+      if (ruleForm.regexFlags.length === 0) {
+        ruleForm.regexFlags = ['CASE_INSENSITIVE'];
+      }
+      if (!ruleForm.regexMaskMode) {
+        ruleForm.regexMaskMode = 'PLACEHOLDER';
+      }
+      if (ruleForm.regexMaskMode !== 'DELETE' && !String(ruleForm.regexMaskText || '').trim()) {
+        ruleForm.regexMaskText = '[REDACTED]';
+      }
+    } else if (isBeginnerMode.value) {
+      ruleForm.showAdvancedConfig = false;
+    }
+  };
+
   const openRuleDialog = rule => {
     const isEdit = !!rule;
     ruleDialogTitle.value = isEdit ? '编辑规则' : '新增规则';
+
     ruleForm.id = isEdit ? rule.id : null;
     ruleForm.name = isEdit ? rule.name : '';
     ruleForm.ruleType = isEdit ? rule.ruleType : 'REGEX';
-    ruleForm.category = isEdit ? rule.category : '';
-    ruleForm.severity = isEdit ? (rule.severity ?? 0.8) : 0.8;
+    ruleForm.severity = isEdit ? Number(rule.severity ?? 0.8) : 0.8;
     ruleForm.enabled = isEdit ? !!rule.enabled : true;
-    ruleForm.configJson = isEdit ? rule.configJson || '' : '';
+
+    const categories = ruleCategoryOptions.value.map(item => item.code);
+    const currentCategory = isEdit ? rule.category : '';
+    if (currentCategory && categories.includes(currentCategory)) {
+      ruleForm.categoryPreset = currentCategory;
+      ruleForm.customCategory = '';
+    } else if (currentCategory) {
+      ruleForm.categoryPreset = '__CUSTOM__';
+      ruleForm.customCategory = currentCategory;
+    } else {
+      ruleForm.categoryPreset = categories[0] || '';
+      ruleForm.customCategory = '';
+    }
+
+    const parsedConfig = isEdit ? parseJsonSafe(rule.configJson) : {};
+    ruleForm.configJson = JSON.stringify(parsedConfig, null, 2);
+    ruleForm.showAdvancedConfig = !isBeginnerMode.value;
+    ruleForm.regexTemplateCode = '';
+
+    if (ruleForm.ruleType === 'REGEX') {
+      ruleForm.regexPattern = normalizeRegexPatternText(String(parsedConfig.pattern || ''));
+      ruleForm.regexFlags = normalizeFlags(parsedConfig.flags || 'CASE_INSENSITIVE');
+      ruleForm.regexMaskMode = normalizeRegexMaskMode(parsedConfig.maskMode);
+      ruleForm.regexMaskText =
+        ruleForm.regexMaskMode === 'DELETE'
+          ? ''
+          : String(parsedConfig.maskText || '[REDACTED]').trim() || '[REDACTED]';
+      if (ruleForm.regexFlags.length === 0) {
+        ruleForm.regexFlags = ['CASE_INSENSITIVE'];
+      }
+      if (ruleForm.showAdvancedConfig) {
+        syncConfigJsonFromStructured();
+      }
+    } else {
+      ruleForm.regexPattern = '';
+      ruleForm.regexFlags = ['CASE_INSENSITIVE'];
+      ruleForm.regexMaskMode = 'PLACEHOLDER';
+      ruleForm.regexMaskText = '[REDACTED]';
+    }
+
     ruleDialogVisible.value = true;
   };
 
+  const buildRuleConfig = () => {
+    if (allowAdvancedConfig.value && ruleForm.showAdvancedConfig) {
+      const raw = ruleForm.configJson?.trim();
+      if (!raw) {
+        return {};
+      }
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          ElMessage.error('配置 JSON 必须是对象');
+          return null;
+        }
+        if (ruleForm.ruleType === 'REGEX' && typeof parsed.pattern === 'string') {
+          const normalizedPattern = normalizeRegexPatternText(parsed.pattern);
+          if (normalizedPattern && normalizedPattern !== parsed.pattern) {
+            parsed.pattern = normalizedPattern;
+            ruleForm.configJson = JSON.stringify(parsed, null, 2);
+            ElMessage.info('已自动规范化 JSON 中的 pattern（双反斜杠 -> 单反斜杠）');
+          }
+          parsed.maskMode = normalizeRegexMaskMode(parsed.maskMode);
+          if (parsed.maskMode === 'DELETE') {
+            delete parsed.maskText;
+          } else if (!String(parsed.maskText || '').trim()) {
+            parsed.maskText = '[REDACTED]';
+          }
+          ruleForm.configJson = JSON.stringify(parsed, null, 2);
+        }
+        return parsed;
+      } catch (error) {
+        ElMessage.error('配置 JSON 格式不正确');
+        return null;
+      }
+    }
+
+    if (ruleForm.ruleType === 'REGEX') {
+      const pattern = normalizeRegexPatternText(ruleForm.regexPattern);
+      if (!pattern) {
+        ElMessage.error('REGEX 规则必须填写 pattern');
+        return null;
+      }
+      if (pattern !== ruleForm.regexPattern) {
+        ruleForm.regexPattern = pattern;
+        if (ruleForm.showAdvancedConfig) {
+          syncConfigJsonFromStructured();
+        }
+        ElMessage.info('已自动规范化 pattern（双反斜杠 -> 单反斜杠）');
+      }
+      const flags = ruleForm.regexFlags.join(',');
+      const maskMode = normalizeRegexMaskMode(ruleForm.regexMaskMode);
+      const maskText = String(ruleForm.regexMaskText || '').trim();
+      return {
+        pattern,
+        ...(flags ? { flags } : {}),
+        maskMode,
+        ...(maskMode === 'DELETE' ? {} : { maskText: maskText || '[REDACTED]' }),
+      };
+    }
+
+    return {};
+  };
+
   const saveRule = async () => {
-    if (!ruleForm.name || !ruleForm.ruleType || !ruleForm.category) {
+    const category =
+      ruleForm.categoryPreset === '__CUSTOM__'
+        ? String(ruleForm.customCategory || '').trim()
+        : String(ruleForm.categoryPreset || '').trim();
+
+    if (!ruleForm.name || !ruleForm.ruleType || !category) {
       ElMessage.warning('请填写完整规则信息');
       return;
     }
 
-    let config = {};
-    if (ruleForm.configJson) {
-      try {
-        config = JSON.parse(ruleForm.configJson);
-      } catch (error) {
-        ElMessage.error('配置 JSON 格式不正确');
-        return;
-      }
+    const config = buildRuleConfig();
+    if (config === null) {
+      return;
     }
 
     const payload = {
       name: ruleForm.name,
       ruleType: ruleForm.ruleType,
-      category: ruleForm.category,
-      severity: ruleForm.severity,
+      category,
+      severity: Number(ruleForm.severity),
       enabled: ruleForm.enabled ? 1 : 0,
       config,
     };
@@ -591,6 +1105,59 @@
       ElMessage.success('规则已保存');
     } catch (error) {
       ElMessage.error('保存规则失败');
+    }
+  };
+
+  const loadBindingAgents = async () => {
+    try {
+      bindingAgents.value = await agentService.list();
+    } catch (error) {
+      bindingAgents.value = [];
+      ElMessage.error('加载 Agent 失败');
+    }
+  };
+
+  const onBindingAgentChange = async agentId => {
+    bindingForm.policyId = undefined;
+    if (!agentId) {
+      return;
+    }
+    try {
+      const binding = await cleaningService.getOnlineDefaultBinding(Number(agentId));
+      bindingForm.policyId = binding?.policyId;
+      bindingForm.enabled = binding?.enabled !== 0;
+    } catch (error) {
+      bindingForm.policyId = undefined;
+      bindingForm.enabled = true;
+    }
+  };
+
+  const openBindingDialog = async () => {
+    bindingDialogVisible.value = true;
+    if (bindingAgents.value.length === 0) {
+      await loadBindingAgents();
+    }
+    if (!bindingForm.agentId && bindingAgents.value.length > 0) {
+      bindingForm.agentId = bindingAgents.value[0].id;
+      await onBindingAgentChange(bindingForm.agentId);
+    }
+  };
+
+  const saveBinding = async () => {
+    if (!bindingForm.agentId || !bindingForm.policyId) {
+      ElMessage.warning('请选择 Agent 和策略');
+      return;
+    }
+    try {
+      await cleaningService.upsertOnlineDefaultBinding({
+        agentId: Number(bindingForm.agentId),
+        policyId: Number(bindingForm.policyId),
+        enabled: bindingForm.enabled ? 1 : 0,
+      });
+      bindingDialogVisible.value = false;
+      ElMessage.success('默认绑定已保存');
+    } catch (error) {
+      ElMessage.error('保存默认绑定失败');
     }
   };
 
@@ -668,11 +1235,28 @@
     margin-bottom: 1rem;
   }
 
+  .severity-editor {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 150px 1fr auto;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .severity-percent {
+    color: #475569;
+    font-weight: 500;
+  }
+
   .field-help {
     margin-top: 6px;
     font-size: 12px;
     color: #64748b;
     line-height: 1.4;
+  }
+
+  .field-help-warning {
+    color: #d97706;
   }
 
   .inline-alert {

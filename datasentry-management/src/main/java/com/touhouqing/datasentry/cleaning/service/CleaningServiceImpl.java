@@ -7,16 +7,19 @@ import com.touhouqing.datasentry.cleaning.enums.CleaningCostChannel;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningAllowlistMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningBindingMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningJobMapper;
+import com.touhouqing.datasentry.cleaning.mapper.CleaningPolicyMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningAllowlist;
 import com.touhouqing.datasentry.cleaning.model.CleaningBinding;
 import com.touhouqing.datasentry.cleaning.model.CleaningContext;
 import com.touhouqing.datasentry.cleaning.model.CleaningJob;
+import com.touhouqing.datasentry.cleaning.model.CleaningPolicy;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicySnapshot;
 import com.touhouqing.datasentry.cleaning.model.Finding;
 import com.touhouqing.datasentry.cleaning.pipeline.CleaningPipeline;
 import com.touhouqing.datasentry.exception.InvalidInputException;
 import com.touhouqing.datasentry.properties.DataSentryProperties;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
@@ -25,6 +28,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class CleaningServiceImpl implements CleaningService {
 
@@ -35,6 +39,8 @@ public class CleaningServiceImpl implements CleaningService {
 	private final CleaningAllowlistMapper allowlistMapper;
 
 	private final CleaningJobMapper jobMapper;
+
+	private final CleaningPolicyMapper policyMapper;
 
 	private final CleaningPipeline pipeline;
 
@@ -79,9 +85,16 @@ public class CleaningServiceImpl implements CleaningService {
 		context.getMetadata().put("disableL3", failClosed);
 		context.getMetadata().put("shadowEnabled", dataSentryProperties.getCleaning().getShadow().isEnabled());
 		context.getMetrics().put("startTimeMs", System.currentTimeMillis());
+		log.info(
+				"Cleaning online start traceId={} agentId={} scene={} policyId={} policyName={} sanitizeRequested={} estimatedTokens={} failClosed={} allowlists={}",
+				traceId, agentId, request.getScene(), snapshot.getPolicyId(), snapshot.getPolicyName(),
+				sanitizeRequested, estimatedTokens, failClosed, allowlists.size());
 		CleaningContext result = pipeline.execute(context, sanitizeRequested);
 		shadowService.submitIfEnabled(result, snapshot.getConfig());
 		recordOnlineCost(agentId, traceId, estimatedTokens, failClosed);
+		log.info("Cleaning online result traceId={} agentId={} verdict={} categories={} findings={}", traceId, agentId,
+				result.getVerdict(), resolveCategories(result.getFindings()),
+				result.getFindings() != null ? result.getFindings().size() : 0);
 		return CleaningResponse.builder()
 			.verdict(result.getVerdict() != null ? result.getVerdict().name() : null)
 			.categories(resolveCategories(result.getFindings()))
@@ -120,7 +133,15 @@ public class CleaningServiceImpl implements CleaningService {
 		Long policyId = request.getPolicyId();
 		if (policyId == null) {
 			CleaningBinding binding = resolveBinding(agentId, request.getScene());
-			policyId = binding.getPolicyId();
+			if (binding != null && binding.getPolicyId() != null) {
+				policyId = binding.getPolicyId();
+			}
+		}
+		if (policyId == null) {
+			policyId = resolveFallbackPolicyId();
+		}
+		if (policyId == null) {
+			throw new InvalidInputException("未找到可用的清理策略：请在请求中传 policyId，或为当前 Agent 配置 ONLINE_TEXT 默认绑定");
 		}
 		return policyResolver.resolveSnapshot(policyId);
 	}
@@ -133,10 +154,19 @@ public class CleaningServiceImpl implements CleaningService {
 		if (binding == null) {
 			binding = bindingMapper.findDefaultByAgent(agentId, CleaningBindingType.ONLINE_TEXT.name());
 		}
-		if (binding == null) {
-			throw new InvalidInputException("未找到可用的清理绑定");
-		}
 		return binding;
+	}
+
+	private Long resolveFallbackPolicyId() {
+		CleaningPolicy fallback = policyMapper
+			.selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CleaningPolicy>()
+				.eq(CleaningPolicy::getEnabled, 1)
+				.orderByDesc(CleaningPolicy::getId)
+				.last("LIMIT 1"));
+		if (fallback == null) {
+			return null;
+		}
+		return fallback.getId();
 	}
 
 	private List<String> resolveCategories(List<Finding> findings) {

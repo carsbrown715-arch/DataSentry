@@ -13,12 +13,14 @@ import com.touhouqing.datasentry.cleaning.model.Finding;
 import com.touhouqing.datasentry.cleaning.model.NodeResult;
 import com.touhouqing.datasentry.cleaning.util.CleaningAllowlistMatcher;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class DetectNode implements PipelineNode {
 
@@ -38,6 +40,7 @@ public class DetectNode implements PipelineNode {
 		List<CleaningRule> rules = snapshot != null ? snapshot.getRules() : List.of();
 		List<Finding> l1Findings = new ArrayList<>();
 		List<Finding> l2Findings = new ArrayList<>();
+		List<Finding> l3Findings = new ArrayList<>();
 		List<Finding> findings = new ArrayList<>();
 		for (CleaningRule rule : rules) {
 			if (rule.getRuleType() == null) {
@@ -52,16 +55,25 @@ public class DetectNode implements PipelineNode {
 		}
 		findings.addAll(l1Findings);
 		findings.addAll(l2Findings);
-		if (!disableL3 && snapshot != null && snapshot.getConfig() != null && snapshot.getConfig().resolvedLlmEnabled()
-				&& shouldEscalateToL3(l1Findings, l2Findings, policyConfig)) {
+		boolean escalatedToL3 = !disableL3 && snapshot != null && snapshot.getConfig() != null
+				&& snapshot.getConfig().resolvedLlmEnabled()
+				&& shouldEscalateToL3(l1Findings, l2Findings, policyConfig);
+		if (escalatedToL3) {
 			boolean hasLlmRule = rules.stream()
 				.anyMatch(rule -> CleaningRuleType.LLM.name().equalsIgnoreCase(rule.getRuleType()));
 			if (hasLlmRule) {
-				findings.addAll(llmDetector.detect(text));
+				l3Findings.addAll(llmDetector.detect(text));
+				findings.addAll(l3Findings);
 			}
 		}
 		List<CleaningAllowlist> allowlists = getAllowlists(context);
-		context.setFindings(CleaningAllowlistMatcher.filterFindings(text, findings, allowlists));
+		List<Finding> filteredFindings = CleaningAllowlistMatcher.filterFindings(text, findings, allowlists);
+		context.setFindings(filteredFindings);
+		log.info(
+				"Cleaning detect runId={} column={} rules={} l1={} l2={} l3={} total={} filtered={} allowlists={} escalatedToL3={} disableL3={}",
+				context.getJobRunId(), context.getColumnName(), rules.size(), l1Findings.size(), l2Findings.size(),
+				l3Findings.size(), findings.size(), filteredFindings.size(), allowlists.size(), escalatedToL3,
+				disableL3);
 		return NodeResult.ok();
 	}
 

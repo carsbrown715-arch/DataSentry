@@ -41,13 +41,24 @@ public final class CleaningSanitizer {
 			if (start < cursor) {
 				continue;
 			}
-			builder.append(text, cursor, start).append(DEFAULT_MASK);
+			builder.append(text, cursor, start).append(resolveReplacement(finding));
 			cursor = end;
 		}
 		if (cursor < text.length()) {
 			builder.append(text.substring(cursor));
 		}
 		return builder.toString();
+	}
+
+	private static String resolveReplacement(Finding finding) {
+		if (finding == null) {
+			return DEFAULT_MASK;
+		}
+		String replacement = finding.getReplacement();
+		if (replacement == null) {
+			return DEFAULT_MASK;
+		}
+		return replacement;
 	}
 
 }

@@ -25,4 +25,6 @@ public class Finding {
 
 	private String detectorSource;
 
+	private String replacement;
+
 }

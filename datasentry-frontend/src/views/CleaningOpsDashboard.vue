@@ -65,9 +65,9 @@
         <el-row :gutter="16" class="metrics-row">
           <el-col :xs="24" :sm="12" :md="6">
             <el-card shadow="never" class="metric-card">
-              <div class="metric-label">L2 Provider 状态</div>
+              <div class="metric-label">L2 提供方状态</div>
               <div class="metric-value status-value">
-                {{ metrics.l2ProviderStatus || 'UNKNOWN' }}
+                {{ formatProviderStatus(metrics.l2ProviderStatus) }}
               </div>
             </el-card>
           </el-col>
@@ -195,13 +195,17 @@
             class="sync-result"
           />
           <el-table :data="pricingCatalog" stripe>
-            <el-table-column prop="provider" label="Provider" min-width="130" />
-            <el-table-column prop="model" label="Model" min-width="120" />
-            <el-table-column prop="version" label="Version" width="100" />
+            <el-table-column prop="provider" label="提供方" min-width="130" />
+            <el-table-column prop="model" label="模型" min-width="120" />
+            <el-table-column prop="version" label="版本" width="100" />
             <el-table-column prop="inputPricePer1k" label="输入单价/1k" width="130" />
             <el-table-column prop="outputPricePer1k" label="输出单价/1k" width="130" />
             <el-table-column prop="currency" label="货币" width="80" />
-            <el-table-column prop="updatedTime" label="更新时间" min-width="180" />
+            <el-table-column label="更新时间" min-width="180">
+              <template #default="scope">
+                {{ formatDate(scope.row.updatedTime) }}
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
 
@@ -212,12 +216,16 @@
             </div>
           </template>
           <el-table :data="alerts" stripe>
-            <el-table-column prop="createdTime" label="时间" min-width="180" />
+            <el-table-column label="时间" min-width="180">
+              <template #default="scope">
+                {{ formatDate(scope.row.createdTime) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="code" label="告警码" min-width="180" />
             <el-table-column label="级别" width="120">
               <template #default="scope">
-                <el-tag :type="scope.row.level === 'WARN' ? 'warning' : 'info'" size="small">
-                  {{ scope.row.level }}
+                <el-tag :type="alertLevelTag(scope.row.level)" size="small">
+                  {{ formatAlertLevel(scope.row.level) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -231,9 +239,9 @@
               <span>DLQ 列表</span>
               <div class="panel-actions">
                 <el-select v-model="dlqStatus" clearable placeholder="状态" style="width: 140px">
-                  <el-option label="READY" value="READY" />
-                  <el-option label="DONE" value="DONE" />
-                  <el-option label="DEAD" value="DEAD" />
+                  <el-option label="待处理" value="READY" />
+                  <el-option label="已完成" value="DONE" />
+                  <el-option label="终止" value="DEAD" />
                 </el-select>
                 <el-button size="small" @click="loadDlq">查询</el-button>
               </div>
@@ -244,7 +252,11 @@
             <el-table-column prop="jobRunId" label="Run ID" width="120" />
             <el-table-column prop="tableName" label="表" min-width="140" />
             <el-table-column prop="retryCount" label="重试" width="90" />
-            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column label="状态" width="110">
+              <template #default="scope">
+                {{ formatDlqStatus(scope.row.status) }}
+              </template>
+            </el-table-column>
             <el-table-column
               prop="errorMessage"
               label="错误"
@@ -273,16 +285,24 @@
             </div>
           </template>
           <el-table :data="costLedgers" stripe>
-            <el-table-column prop="createdTime" label="时间" min-width="180" />
-            <el-table-column prop="channel" label="链路" width="100" />
+            <el-table-column label="时间" min-width="180">
+              <template #default="scope">
+                {{ formatDate(scope.row.createdTime) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="链路" width="100">
+              <template #default="scope">
+                {{ formatChannel(scope.row.channel) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="detectorLevel" label="层级" width="110" />
             <el-table-column prop="jobRunId" label="Run ID" width="110" />
             <el-table-column prop="inputTokensEst" label="输入Token" width="120" />
             <el-table-column prop="costAmount" label="成本" width="120">
               <template #default="scope">¥ {{ formatCost(scope.row.costAmount) }}</template>
             </el-table-column>
-            <el-table-column prop="provider" label="Provider" min-width="120" />
-            <el-table-column prop="model" label="Model" min-width="120" />
+            <el-table-column prop="provider" label="提供方" min-width="120" />
+            <el-table-column prop="model" label="模型" min-width="120" />
           </el-table>
         </el-card>
       </main>
@@ -351,6 +371,54 @@
       return '-';
     }
     return String(value).replace('T', ' ');
+  };
+
+  const formatProviderStatus = status => {
+    const labels = {
+      UNKNOWN: '未知',
+      UP: '正常',
+      HEALTHY: '正常',
+      DEGRADED: '降级',
+      DOWN: '不可用',
+      DISABLED: '已禁用',
+    };
+    return labels[status] || status || '-';
+  };
+
+  const alertLevelTag = level => {
+    if (level === 'ERROR') {
+      return 'danger';
+    }
+    if (level === 'WARN') {
+      return 'warning';
+    }
+    return 'info';
+  };
+
+  const formatAlertLevel = level => {
+    const labels = {
+      ERROR: '错误',
+      WARN: '警告',
+      INFO: '信息',
+    };
+    return labels[level] || level || '-';
+  };
+
+  const formatDlqStatus = status => {
+    const labels = {
+      READY: '待处理',
+      DONE: '已完成',
+      DEAD: '终止',
+    };
+    return labels[status] || status || '-';
+  };
+
+  const formatChannel = channel => {
+    const labels = {
+      ONLINE: '在线',
+      BATCH: '批处理',
+    };
+    return labels[channel] || channel || '-';
   };
 
   const loadMetrics = async () => {

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,6 +57,26 @@ public class CleaningMetaServiceTest {
 		assertEquals(0.4, reviewThreshold.get().getDefaultValue());
 		assertEquals(0.6, l2Threshold.get().getDefaultValue());
 		assertEquals(0.0, shadowRatio.get().getDefaultValue());
+	}
+
+	@Test
+	public void shouldProvideGuidanceForBeginnerFriendlyUi() {
+		CleaningOptionMetaView options = cleaningMetaService.getOptions();
+
+		assertNotNull(options.getRuleTypeSchemas());
+		assertNotNull(options.getRuleTypeSchemas().get("REGEX"));
+		assertNotNull(options.getRuleTypeUiBehavior());
+		assertTrue(options.getRuleTypeUiBehavior().containsKey("REGEX"));
+		assertNotNull(options.getSeverityGuidance());
+		assertFalse(options.getSeverityGuidance().isEmpty());
+		assertNotNull(options.getRiskConfirmations());
+		assertTrue(options.getRiskConfirmations().containsKey("WRITEBACK"));
+		assertNotNull(options.getRegexTemplates());
+		assertFalse(options.getRegexTemplates().isEmpty());
+		assertEquals("PLACEHOLDER", options.getJsonConfigTemplates().get("REGEX") instanceof java.util.Map
+				? ((java.util.Map<?, ?>) options.getJsonConfigTemplates().get("REGEX")).get("maskMode") : null);
+		assertNotNull(options.getFieldHelp().get("policy.regex.maskMode"));
+		assertNotNull(options.getFieldHelp().get("policy.regex.maskText"));
 	}
 
 }

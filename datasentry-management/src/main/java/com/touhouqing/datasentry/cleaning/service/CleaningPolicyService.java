@@ -13,6 +13,7 @@ import com.touhouqing.datasentry.cleaning.mapper.CleaningRuleMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicy;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicyRule;
 import com.touhouqing.datasentry.cleaning.model.CleaningRule;
+import com.touhouqing.datasentry.cleaning.model.RegexRuleConfig;
 import com.touhouqing.datasentry.exception.InvalidInputException;
 import com.touhouqing.datasentry.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
@@ -20,15 +21,24 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class CleaningPolicyService {
+
+	private static final Set<String> SUPPORTED_RULE_TYPES = Set.of("REGEX", "L2_DUMMY", "LLM");
+
+	private static final Set<String> REGEX_ALLOWED_FLAGS = Set.of("CASE_INSENSITIVE", "MULTILINE", "DOTALL");
+
+	private static final Set<String> REGEX_ALLOWED_MASK_MODES = Set.of(RegexRuleConfig.MASK_MODE_PLACEHOLDER,
+			RegexRuleConfig.MASK_MODE_DELETE);
 
 	private final CleaningPolicyMapper policyMapper;
 
@@ -110,12 +120,16 @@ public class CleaningPolicyService {
 	}
 
 	public CleaningRule createRule(CleaningRuleRequest request) {
+		String ruleType = required(request.getRuleType(), "规则类型不能为空");
+		validateRuleType(ruleType);
+		validateRuleConfig(ruleType, request.getConfig());
+		double severity = normalizedSeverity(request.getSeverity());
 		LocalDateTime now = LocalDateTime.now();
 		CleaningRule rule = CleaningRule.builder()
 			.name(required(request.getName(), "规则名称不能为空"))
-			.ruleType(required(request.getRuleType(), "规则类型不能为空"))
+			.ruleType(ruleType)
 			.category(required(request.getCategory(), "规则类别不能为空"))
-			.severity(request.getSeverity() != null ? request.getSeverity() : 0.8)
+			.severity(severity)
 			.enabled(request.getEnabled() != null ? request.getEnabled() : 1)
 			.configJson(toJson(request.getConfig()))
 			.createdTime(now)
@@ -130,12 +144,17 @@ public class CleaningPolicyService {
 		if (rule == null) {
 			throw new InvalidInputException("规则不存在");
 		}
+		String ruleType = required(request.getRuleType(), "规则类型不能为空");
+		validateRuleType(ruleType);
+		validateRuleConfig(ruleType, request.getConfig());
+		double severity = normalizedSeverity(
+				request.getSeverity() != null ? request.getSeverity() : rule.getSeverity());
 		LambdaUpdateWrapper<CleaningRule> wrapper = new LambdaUpdateWrapper<CleaningRule>()
 			.eq(CleaningRule::getId, ruleId)
 			.set(CleaningRule::getName, required(request.getName(), "规则名称不能为空"))
-			.set(CleaningRule::getRuleType, required(request.getRuleType(), "规则类型不能为空"))
+			.set(CleaningRule::getRuleType, ruleType)
 			.set(CleaningRule::getCategory, required(request.getCategory(), "规则类别不能为空"))
-			.set(CleaningRule::getSeverity, request.getSeverity() != null ? request.getSeverity() : rule.getSeverity())
+			.set(CleaningRule::getSeverity, severity)
 			.set(CleaningRule::getEnabled, request.getEnabled() != null ? request.getEnabled() : rule.getEnabled())
 			.set(CleaningRule::getConfigJson, toJson(request.getConfig()))
 			.set(CleaningRule::getUpdatedTime, LocalDateTime.now());
@@ -182,6 +201,74 @@ public class CleaningPolicyService {
 	private String required(String value, String message) {
 		if (value == null || value.isBlank()) {
 			throw new InvalidInputException(message);
+		}
+		return value;
+	}
+
+	private void validateRuleType(String ruleType) {
+		if (!SUPPORTED_RULE_TYPES.contains(ruleType)) {
+			throw new InvalidInputException("规则类型不支持: " + ruleType);
+		}
+	}
+
+	private void validateRuleConfig(String ruleType, Map<String, Object> config) {
+		if (!"REGEX".equals(ruleType)) {
+			return;
+		}
+		Map<String, Object> effectiveConfig = config != null ? config : Map.of();
+		String pattern = asTrimmedString(effectiveConfig.get("pattern"));
+		if (pattern == null || pattern.isEmpty()) {
+			throw new InvalidInputException("REGEX 规则缺少 pattern，请填写正则表达式");
+		}
+		String maskMode = asTrimmedString(effectiveConfig.get("maskMode"));
+		if (maskMode != null && !REGEX_ALLOWED_MASK_MODES.contains(maskMode.toUpperCase())) {
+			throw new InvalidInputException("REGEX maskMode 不支持: " + maskMode + "，仅支持 PLACEHOLDER/DELETE");
+		}
+		String maskText = asTrimmedString(effectiveConfig.get("maskText"));
+		if (maskMode != null && RegexRuleConfig.MASK_MODE_DELETE.equalsIgnoreCase(maskMode) && maskText != null) {
+			throw new InvalidInputException("REGEX maskMode=DELETE 时不应填写 maskText");
+		}
+		Object flagsValue = effectiveConfig.get("flags");
+		if (flagsValue == null) {
+			return;
+		}
+		for (String flag : normalizedFlags(flagsValue)) {
+			if (!REGEX_ALLOWED_FLAGS.contains(flag)) {
+				throw new InvalidInputException("REGEX flags 不支持: " + flag + "，仅支持 CASE_INSENSITIVE/MULTILINE/DOTALL");
+			}
+		}
+	}
+
+	private List<String> normalizedFlags(Object value) {
+		if (value instanceof String flagText) {
+			if (flagText.isBlank()) {
+				return List.of();
+			}
+			return Arrays.stream(flagText.split(",")).map(String::trim).filter(item -> !item.isEmpty()).toList();
+		}
+		if (value instanceof List<?> flagList) {
+			return flagList.stream()
+				.filter(Objects::nonNull)
+				.map(String::valueOf)
+				.map(String::trim)
+				.filter(item -> !item.isEmpty())
+				.toList();
+		}
+		throw new InvalidInputException("REGEX flags 必须是字符串或字符串数组");
+	}
+
+	private String asTrimmedString(Object value) {
+		if (value == null) {
+			return null;
+		}
+		String text = String.valueOf(value).trim();
+		return text.isEmpty() ? null : text;
+	}
+
+	private double normalizedSeverity(Double severity) {
+		double value = severity != null ? severity : 0.8;
+		if (value < 0 || value > 1) {
+			throw new InvalidInputException("严重度必须在 0 到 1 之间");
 		}
 		return value;
 	}

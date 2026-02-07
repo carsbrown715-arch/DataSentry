@@ -22,8 +22,8 @@
           class="intro-alert"
           :title="
             isBeginnerMode
-              ? '新手模式：字段中文化，并附带判定解释。'
-              : '专家模式：保留原始接口语义，便于精细调试。'
+              ? '新手模式：默认保留最少必填参数，结果区域会解释判定原因。'
+              : '专家模式：保留完整接口参数，便于精细调试。'
           "
         />
 
@@ -82,16 +82,6 @@
               <div class="field-help">{{ getFieldHelp('realtime.action') }}</div>
             </el-form-item>
 
-            <el-form-item label="业务场景">
-              <el-input v-model="form.scene" placeholder="可选：业务场景标识" />
-              <div class="field-help">{{ getFieldHelp('realtime.scene') }}</div>
-            </el-form-item>
-
-            <el-form-item label="策略 ID">
-              <el-input-number v-model="form.policyId" :min="1" :step="1" />
-              <div class="field-help">{{ getFieldHelp('realtime.policyId') }}</div>
-            </el-form-item>
-
             <el-form-item label="待检测文本">
               <el-input
                 v-model="form.text"
@@ -106,6 +96,7 @@
                 v-model="sampleText"
                 placeholder="选择示例文本"
                 clearable
+                style="width: 100%"
                 @change="applySampleText"
               >
                 <el-option
@@ -116,6 +107,37 @@
                 />
               </el-select>
             </el-form-item>
+
+            <el-form-item label="高级参数">
+              <el-button text type="primary" @click="toggleAdvancedParams">
+                {{ showAdvancedParams ? '收起高级参数' : '展开高级参数' }}
+              </el-button>
+            </el-form-item>
+
+            <template v-if="showAdvancedParams">
+              <el-form-item label="业务场景">
+                <el-input v-model="form.scene" placeholder="可选：业务场景标识" />
+                <div class="field-help">{{ getFieldHelp('realtime.scene') }}</div>
+              </el-form-item>
+
+              <el-form-item label="清理策略">
+                <el-select
+                  v-model="form.policyId"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                  placeholder="可选：指定策略，不填则走绑定/默认策略"
+                >
+                  <el-option
+                    v-for="policy in policies"
+                    :key="policy.id"
+                    :label="`${policy.name} (#${policy.id})`"
+                    :value="policy.id"
+                  />
+                </el-select>
+                <div class="field-help">{{ getFieldHelp('realtime.policyId') }}</div>
+              </el-form-item>
+            </template>
 
             <el-form-item>
               <el-button type="primary" :loading="submitting" @click="submitRequest">
@@ -160,7 +182,7 @@
                     type="warning"
                     class="category-tag"
                   >
-                    {{ category }}
+                    {{ formatCategory(category) }}
                   </el-tag>
                 </template>
               </el-descriptions-item>
@@ -177,6 +199,16 @@
               show-icon
               :title="verdictHint"
             />
+
+            <el-card v-if="responseData" shadow="never" class="explain-panel">
+              <template #header>
+                <span>判定解释</span>
+              </template>
+              <ul class="explain-list">
+                <li v-for="line in explainLines" :key="line">{{ line }}</li>
+              </ul>
+              <div class="field-help">{{ getFieldHelp('realtime.explain') }}</div>
+            </el-card>
 
             <div v-if="responseRaw" class="raw-panel">
               <h4>Raw JSON</h4>
@@ -199,6 +231,7 @@
   import cleaningService from '@/services/cleaning';
   import {
     buildOptionLabel,
+    getOptionLabelZh,
     mergeOptionsWithFallback,
     readCleaningUiMode,
     UI_MODE_BEGINNER,
@@ -211,6 +244,7 @@
   const loadingAgents = ref(false);
   const submitting = ref(false);
   const agents = ref([]);
+  const policies = ref([]);
 
   const responseData = ref(null);
   const responseRaw = ref('');
@@ -219,6 +253,7 @@
   const uiMode = ref(readCleaningUiMode());
   const optionMeta = ref(mergeOptionsWithFallback(null));
   const sampleText = ref('');
+  const showAdvancedParams = ref(false);
 
   const form = reactive({
     agentId: undefined,
@@ -232,6 +267,7 @@
 
   const isBeginnerMode = computed(() => uiMode.value === UI_MODE_BEGINNER);
   const verdictOptions = computed(() => optionMeta.value.verdicts || []);
+  const categoryOptions = computed(() => optionMeta.value.ruleCategories || []);
 
   const sampleTextOptions = [
     { label: '手机号示例', value: '请联系我 13812345678 处理退款。' },
@@ -249,13 +285,53 @@
     return matched?.description || defaultHelp;
   });
 
+  const explainLines = computed(() => {
+    if (!responseData.value) {
+      return [];
+    }
+    const verdict = responseData.value.verdict;
+    const categories = responseData.value.categories || [];
+    const lines = [];
+
+    if (verdict) {
+      lines.push(`系统最终判定为：${formatVerdict(verdict)}。`);
+    }
+
+    if (categories.length > 0) {
+      const categoryLabels = categories.map(category => formatCategory(category));
+      lines.push(`命中风险类别：${categoryLabels.join('、')}。`);
+    } else {
+      lines.push('未返回命中类别，通常表示当前文本未命中显著风险。');
+    }
+
+    if (verdict === 'BLOCK') {
+      lines.push('该请求风险较高，已触发拦截策略。');
+    } else if (verdict === 'REVIEW') {
+      lines.push('该请求处于人工审核区间，建议进入人审流程。');
+    } else if (verdict === 'REDACTED') {
+      lines.push('该请求已执行脱敏处理，返回文本为脱敏结果。');
+    } else if (verdict === 'ALLOW') {
+      lines.push('该请求未触发拦截条件，可按业务策略正常放行。');
+    }
+
+    return lines;
+  });
+
   const handleModeChange = mode => {
     uiMode.value = mode === UI_MODE_EXPERT ? UI_MODE_EXPERT : UI_MODE_BEGINNER;
+    if (uiMode.value === UI_MODE_EXPERT) {
+      showAdvancedParams.value = true;
+    }
+  };
+
+  const toggleAdvancedParams = () => {
+    showAdvancedParams.value = !showAdvancedParams.value;
   };
 
   const getFieldHelp = key => optionMeta.value.fieldHelp?.[key] || '';
 
   const formatVerdict = code => buildOptionLabel(code, verdictOptions.value);
+  const formatCategory = code => getOptionLabelZh(code, categoryOptions.value);
 
   const applySampleText = value => {
     if (!value) {
@@ -278,6 +354,14 @@
       ElMessage.error('加载 Agent 失败');
     } finally {
       loadingAgents.value = false;
+    }
+  };
+
+  const loadPolicies = async () => {
+    try {
+      policies.value = await cleaningService.listPolicies();
+    } catch (error) {
+      policies.value = [];
     }
   };
 
@@ -367,8 +451,9 @@
       form.apiKey = cachedKey;
       form.rememberApiKey = true;
     }
+    showAdvancedParams.value = !isBeginnerMode.value;
     await loadOptionMeta();
-    await loadAgents();
+    await Promise.all([loadAgents(), loadPolicies()]);
   });
 </script>
 
@@ -458,5 +543,17 @@
 
   .response-guide {
     margin-top: 1rem;
+  }
+
+  .explain-panel {
+    margin-top: 12px;
+    border-color: #e2e8f0;
+  }
+
+  .explain-list {
+    margin: 0;
+    padding-left: 18px;
+    color: #334155;
+    line-height: 1.7;
   }
 </style>

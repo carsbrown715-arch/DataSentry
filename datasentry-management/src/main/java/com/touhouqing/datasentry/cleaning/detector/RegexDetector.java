@@ -21,6 +21,8 @@ public class RegexDetector {
 
 	private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
+	private static final String DEFAULT_MASK = "[REDACTED]";
+
 	public List<Finding> detect(String text, CleaningRule rule) {
 		if (text == null || text.isEmpty() || rule == null || rule.getConfigJson() == null) {
 			return List.of();
@@ -29,10 +31,41 @@ public class RegexDetector {
 		if (config == null || config.getPattern() == null || config.getPattern().isBlank()) {
 			return List.of();
 		}
-		Pattern pattern = compilePattern(config);
+		String originalPattern = config.getPattern();
+		Pattern pattern = compilePattern(originalPattern, config.getFlags());
 		if (pattern == null) {
 			return List.of();
 		}
+		String replacement = resolveReplacement(config);
+		List<Finding> findings = detectWithCompiledPattern(text, rule, pattern, replacement);
+		String effectivePattern = originalPattern;
+		boolean normalizedApplied = false;
+		if (findings.isEmpty()) {
+			String normalizedPattern = normalizeOverEscapedPattern(originalPattern);
+			if (!normalizedPattern.equals(originalPattern)) {
+				Pattern normalizedCompiled = compilePattern(normalizedPattern, config.getFlags());
+				if (normalizedCompiled != null) {
+					List<Finding> normalizedFindings = detectWithCompiledPattern(text, rule, normalizedCompiled,
+							replacement);
+					if (!normalizedFindings.isEmpty()) {
+						findings = normalizedFindings;
+						effectivePattern = normalizedPattern;
+						normalizedApplied = true;
+						log.warn("Regex pattern auto-normalized for ruleId={} originalPattern={} normalizedPattern={}",
+								rule.getId(), originalPattern, normalizedPattern);
+					}
+				}
+			}
+		}
+		log.info(
+				"Regex detect ruleId={} ruleName={} category={} pattern={} effectivePattern={} flags={} matched={} normalizedApplied={} textLength={} textPreview={}",
+				rule.getId(), rule.getName(), rule.getCategory(), originalPattern, effectivePattern, config.getFlags(),
+				findings.size(), normalizedApplied, text.length(), previewText(text));
+		return findings;
+	}
+
+	private List<Finding> detectWithCompiledPattern(String text, CleaningRule rule, Pattern pattern,
+			String replacement) {
 		Matcher matcher = pattern.matcher(text);
 		List<Finding> findings = new ArrayList<>();
 		while (matcher.find()) {
@@ -43,9 +76,36 @@ public class RegexDetector {
 				.start(matcher.start())
 				.end(matcher.end())
 				.detectorSource("L1_REGEX")
+				.replacement(replacement)
 				.build());
 		}
 		return findings;
+	}
+
+	private String resolveReplacement(RegexRuleConfig config) {
+		if (config == null) {
+			return DEFAULT_MASK;
+		}
+		String maskMode = config.getMaskMode();
+		if (RegexRuleConfig.MASK_MODE_DELETE.equalsIgnoreCase(maskMode)) {
+			return "";
+		}
+		String maskText = config.getMaskText();
+		if (maskText == null || maskText.isBlank()) {
+			return DEFAULT_MASK;
+		}
+		return maskText;
+	}
+
+	private String previewText(String text) {
+		if (text == null) {
+			return "";
+		}
+		String normalized = text.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+		if (normalized.length() <= 32) {
+			return normalized;
+		}
+		return normalized.substring(0, 32) + "...";
 	}
 
 	private RegexRuleConfig parseConfig(String configJson, Long ruleId) {
@@ -58,18 +118,32 @@ public class RegexDetector {
 		}
 	}
 
-	private Pattern compilePattern(RegexRuleConfig config) {
-		String key = config.getPattern() + "#" + config.getFlags();
+	private Pattern compilePattern(String pattern, String flagsText) {
+		String key = pattern + "#" + flagsText;
 		return PATTERN_CACHE.computeIfAbsent(key, k -> {
 			try {
-				int flags = parseFlags(config.getFlags());
-				return Pattern.compile(config.getPattern(), flags);
+				int flags = parseFlags(flagsText);
+				return Pattern.compile(pattern, flags);
 			}
 			catch (Exception e) {
-				log.warn("Failed to compile regex pattern: {}", config.getPattern(), e);
+				log.warn("Failed to compile regex pattern: {}", pattern, e);
 				return null;
 			}
 		});
+	}
+
+	private String normalizeOverEscapedPattern(String pattern) {
+		if (pattern == null || pattern.isBlank()) {
+			return pattern;
+		}
+		return pattern.replace("\\\\d", "\\d")
+			.replace("\\\\D", "\\D")
+			.replace("\\\\w", "\\w")
+			.replace("\\\\W", "\\W")
+			.replace("\\\\s", "\\s")
+			.replace("\\\\S", "\\S")
+			.replace("\\\\b", "\\b")
+			.replace("\\\\B", "\\B");
 	}
 
 	private int parseFlags(String flags) {

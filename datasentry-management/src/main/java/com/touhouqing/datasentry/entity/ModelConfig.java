@@ -19,6 +19,7 @@ import com.touhouqing.datasentry.enums.ModelType;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -35,6 +36,19 @@ public class ModelConfig {
 	private String apiKey;
 
 	private String modelName;
+
+	private String modelVersion;
+
+	private BigDecimal inputPricePer1k;
+
+	private BigDecimal outputPricePer1k;
+
+	private String currency;
+
+	private String pricingSource;
+
+	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+	private LocalDateTime pricingUpdatedAt;
 
 	private Double temperature;
 

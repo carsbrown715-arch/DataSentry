@@ -63,6 +63,7 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 			.mode(mode)
 			.writebackMode(writebackMode)
 			.reviewPolicy(reviewPolicy)
+			.backupPolicyJson(toJson(request.getBackupPolicy()))
 			.writebackMappingJson(toJson(request.getWritebackMapping()))
 			.batchSize(resolveBatchSize(request.getBatchSize()))
 			.budgetEnabled(resolveBudgetEnabled(request.getBudgetEnabled()))
@@ -77,6 +78,71 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 			.build();
 		jobMapper.insert(job);
 		return job;
+	}
+
+	@Override
+	public CleaningJob updateJob(Long jobId, CleaningJobCreateRequest request) {
+		CleaningJob existing = jobMapper.selectById(jobId);
+		if (existing == null) {
+			throw new InvalidInputException("清理任务不存在");
+		}
+		String mode = resolveEnum(request.getMode(), CleaningJobMode.DRY_RUN.name(), CleaningJobMode.class);
+		String writebackMode = resolveEnum(request.getWritebackMode(), CleaningWritebackMode.NONE.name(),
+				CleaningWritebackMode.class);
+		String reviewPolicy = resolveEnum(request.getReviewPolicy(), CleaningReviewPolicy.NEVER.name(),
+				CleaningReviewPolicy.class);
+		String targetConfigType = targetConfigValidator.resolveType(request.getTargetConfigType());
+		java.util.Map<String, String> normalizedJsonPathMappings = targetConfigValidator
+			.normalizeJsonPathMappings(targetConfigType, request.getTargetColumns(), request.getTargetConfig());
+		LocalDateTime now = LocalDateTime.now();
+		CleaningJob job = CleaningJob.builder()
+			.id(jobId)
+			.agentId(request.getAgentId())
+			.datasourceId(request.getDatasourceId())
+			.tableName(request.getTableName())
+			.targetConfigType(targetConfigType)
+			.targetConfigJson(toJson(
+					normalizedJsonPathMappings.isEmpty() ? request.getTargetConfig() : normalizedJsonPathMappings))
+			.pkColumnsJson(toJson(request.getPkColumns()))
+			.targetColumnsJson(toJson(request.getTargetColumns()))
+			.whereSql(request.getWhereSql())
+			.policyId(request.getPolicyId())
+			.mode(mode)
+			.writebackMode(writebackMode)
+			.reviewPolicy(reviewPolicy)
+			.backupPolicyJson(toJson(request.getBackupPolicy()))
+			.writebackMappingJson(toJson(request.getWritebackMapping()))
+			.batchSize(resolveBatchSize(request.getBatchSize()))
+			.concurrency(existing.getConcurrency())
+			.rateLimit(existing.getRateLimit())
+			.budgetEnabled(resolveBudgetEnabled(request.getBudgetEnabled()))
+			.budgetSoftLimit(resolveSoftLimit(request.getBudgetSoftLimit()))
+			.budgetHardLimit(resolveHardLimit(request.getBudgetHardLimit()))
+			.budgetCurrency(resolveBudgetCurrency(request.getBudgetCurrency()))
+			.onlineFailClosedEnabled(resolveFailClosedEnabled(request.getOnlineFailClosedEnabled()))
+			.onlineRequestTokenLimit(resolveOnlineTokenLimit(request.getOnlineRequestTokenLimit()))
+			.enabled(request.getEnabled() != null ? request.getEnabled() : existing.getEnabled())
+			.createdTime(existing.getCreatedTime())
+			.updatedTime(now)
+			.build();
+		jobMapper.updateById(job);
+		return jobMapper.selectById(jobId);
+	}
+
+	@Override
+	public void deleteJob(Long jobId) {
+		CleaningJob existing = jobMapper.selectById(jobId);
+		if (existing == null) {
+			throw new InvalidInputException("清理任务不存在");
+		}
+		Long activeRunCount = jobRunMapper
+			.selectCount(new LambdaQueryWrapper<CleaningJobRun>().eq(CleaningJobRun::getJobId, jobId)
+				.in(CleaningJobRun::getStatus, CleaningJobRunStatus.QUEUED.name(), CleaningJobRunStatus.RUNNING.name(),
+						CleaningJobRunStatus.PAUSED.name()));
+		if (activeRunCount != null && activeRunCount > 0) {
+			throw new InvalidInputException("任务存在运行中的实例，请先暂停或取消后再删除");
+		}
+		jobMapper.deleteById(jobId);
 	}
 
 	@Override
@@ -277,7 +343,7 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 			return JsonUtil.getObjectMapper().writeValueAsString(value);
 		}
 		catch (JsonProcessingException e) {
-			throw new InvalidInputException("Invalid json payload");
+			throw new InvalidInputException("JSON 序列化失败，请检查任务配置字段格式");
 		}
 	}
 

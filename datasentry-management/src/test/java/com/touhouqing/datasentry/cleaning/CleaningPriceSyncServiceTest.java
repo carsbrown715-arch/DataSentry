@@ -7,6 +7,8 @@ import com.touhouqing.datasentry.cleaning.service.CleaningNotificationService;
 import com.touhouqing.datasentry.cleaning.service.CleaningOpsStateService;
 import com.touhouqing.datasentry.cleaning.service.CleaningPriceSyncService;
 import com.touhouqing.datasentry.cleaning.service.CleaningPricingService;
+import com.touhouqing.datasentry.entity.ModelConfig;
+import com.touhouqing.datasentry.mapper.ModelConfigMapper;
 import com.touhouqing.datasentry.properties.DataSentryProperties;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +33,9 @@ public class CleaningPriceSyncServiceTest {
 
 	@Mock
 	private CleaningPriceCatalogMapper priceCatalogMapper;
+
+	@Mock
+	private ModelConfigMapper modelConfigMapper;
 
 	@Mock
 	private CleaningNotificationService notificationService;
@@ -47,10 +53,11 @@ public class CleaningPriceSyncServiceTest {
 		properties.getCleaning().getPricing().setSourceType("LOCAL_CONFIG");
 		properties.getCleaning().getPricing().setLocalCatalog(List.of(item));
 		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
-		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper);
+		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper, modelConfigMapper);
 		CleaningPriceSyncService syncService = new CleaningPriceSyncService(properties, priceCatalogMapper,
-				opsStateService, notificationService, pricingService);
+				modelConfigMapper, opsStateService, notificationService, pricingService);
 
+		when(modelConfigMapper.findByProviderAndModelName("LOCAL_DEFAULT", "L3_LLM")).thenReturn(null);
 		when(priceCatalogMapper.findLatestByProviderAndModel("LOCAL_DEFAULT", "L3_LLM")).thenReturn(null);
 
 		CleaningPricingSyncResult result = syncService.syncNow("test");
@@ -74,9 +81,9 @@ public class CleaningPriceSyncServiceTest {
 		properties.getCleaning().getPricing().setSourceType("LOCAL_CONFIG");
 		properties.getCleaning().getPricing().setLocalCatalog(List.of(item));
 		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
-		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper);
+		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper, modelConfigMapper);
 		CleaningPriceSyncService syncService = new CleaningPriceSyncService(properties, priceCatalogMapper,
-				opsStateService, notificationService, pricingService);
+				modelConfigMapper, opsStateService, notificationService, pricingService);
 
 		CleaningPriceCatalog existed = CleaningPriceCatalog.builder()
 			.id(1L)
@@ -87,6 +94,7 @@ public class CleaningPriceSyncServiceTest {
 			.outputPricePer1k(new BigDecimal("0.004000"))
 			.currency("CNY")
 			.build();
+		when(modelConfigMapper.findByProviderAndModelName("LOCAL_DEFAULT", "L3_LLM")).thenReturn(null);
 		when(priceCatalogMapper.findLatestByProviderAndModel("LOCAL_DEFAULT", "L3_LLM")).thenReturn(existed);
 
 		CleaningPricingSyncResult result = syncService.syncNow("test");
@@ -97,14 +105,47 @@ public class CleaningPriceSyncServiceTest {
 	}
 
 	@Test
+	public void shouldSkipWhenManualPricingProtected() {
+		DataSentryProperties properties = new DataSentryProperties();
+		DataSentryProperties.Cleaning.Pricing.PriceItem item = new DataSentryProperties.Cleaning.Pricing.PriceItem();
+		item.setProvider("LOCAL_DEFAULT");
+		item.setModel("L3_LLM");
+		item.setVersion("default");
+		item.setInputPricePer1k(new BigDecimal("0.003000"));
+		item.setOutputPricePer1k(new BigDecimal("0.005000"));
+		item.setCurrency("CNY");
+		properties.getCleaning().getPricing().setSourceType("LOCAL_CONFIG");
+		properties.getCleaning().getPricing().setLocalCatalog(List.of(item));
+		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
+		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper, modelConfigMapper);
+		CleaningPriceSyncService syncService = new CleaningPriceSyncService(properties, priceCatalogMapper,
+				modelConfigMapper, opsStateService, notificationService, pricingService);
+
+		ModelConfig modelConfig = new ModelConfig();
+		modelConfig.setProvider("LOCAL_DEFAULT");
+		modelConfig.setModelName("L3_LLM");
+		modelConfig.setPricingSource("MANUAL");
+		modelConfig.setInputPricePer1k(new BigDecimal("0.003000"));
+		modelConfig.setOutputPricePer1k(new BigDecimal("0.005000"));
+		when(modelConfigMapper.findByProviderAndModelName("LOCAL_DEFAULT", "L3_LLM")).thenReturn(modelConfig);
+
+		CleaningPricingSyncResult result = syncService.syncNow("test");
+
+		assertTrue(result.isSuccess());
+		assertEquals(1, result.getSkipped());
+		verify(priceCatalogMapper, never()).insert(any(CleaningPriceCatalog.class));
+		verify(priceCatalogMapper, never()).updateById(any(CleaningPriceCatalog.class));
+	}
+
+	@Test
 	public void shouldMarkFailureWhenHttpSourceBroken() {
 		DataSentryProperties properties = new DataSentryProperties();
 		properties.getCleaning().getPricing().setSourceType("HTTP_JSON");
 		properties.getCleaning().getPricing().getHttp().setUrl("http://::invalid");
 		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
-		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper);
+		CleaningPricingService pricingService = new CleaningPricingService(priceCatalogMapper, modelConfigMapper);
 		CleaningPriceSyncService syncService = new CleaningPriceSyncService(properties, priceCatalogMapper,
-				opsStateService, notificationService, pricingService);
+				modelConfigMapper, opsStateService, notificationService, pricingService);
 
 		CleaningPricingSyncResult result = syncService.syncNow("scheduled");
 

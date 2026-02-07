@@ -12,6 +12,10 @@ public interface CleaningJobService {
 
 	CleaningJob createJob(CleaningJobCreateRequest request);
 
+	CleaningJob updateJob(Long jobId, CleaningJobCreateRequest request);
+
+	void deleteJob(Long jobId);
+
 	CleaningJob getJob(Long jobId);
 
 	List<CleaningJob> listJobs(Long agentId, Long datasourceId, Integer enabled);

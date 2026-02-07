@@ -66,6 +66,11 @@
                 </template>
               </el-table-column>
               <el-table-column prop="modelName" label="模型名称" width="180" />
+              <el-table-column prop="modelVersion" label="模型版本" width="120">
+                <template #default="scope">
+                  {{ scope.row.modelVersion || 'default' }}
+                </template>
+              </el-table-column>
               <el-table-column prop="modelType" label="模型类型" width="120">
                 <template #default="scope">
                   <el-tag
@@ -107,6 +112,29 @@
               <el-table-column prop="maxTokens" label="最大Token" width="120">
                 <template #default="scope">
                   {{ scope.row.maxTokens || 2000 }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="inputPricePer1k" label="输入单价/1k" width="140">
+                <template #default="scope">
+                  {{
+                    scope.row.inputPricePer1k != null
+                      ? Number(scope.row.inputPricePer1k).toFixed(6)
+                      : '--'
+                  }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="outputPricePer1k" label="输出单价/1k" width="140">
+                <template #default="scope">
+                  {{
+                    scope.row.outputPricePer1k != null
+                      ? Number(scope.row.outputPricePer1k).toFixed(6)
+                      : '--'
+                  }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="currency" label="货币" width="100">
+                <template #default="scope">
+                  {{ scope.row.currency || '--' }}
                 </template>
               </el-table-column>
               <el-table-column prop="isActive" label="状态" width="100">
@@ -210,6 +238,36 @@
               v-model="formData.modelName"
               placeholder="例如: gpt-4, deepseek-chat,qwen-plus,text-embedding-v4"
             />
+          </el-form-item>
+
+          <el-form-item label="模型版本" prop="modelVersion">
+            <el-input v-model="formData.modelVersion" placeholder="例如: default / v1" />
+          </el-form-item>
+
+          <el-form-item label="输入单价/1k" prop="inputPricePer1k">
+            <el-input-number
+              v-model="formData.inputPricePer1k"
+              :min="0"
+              :step="0.000001"
+              :precision="6"
+              style="width: 100%"
+            />
+            <div class="form-tip">每 1k 输入 token 的计费价格</div>
+          </el-form-item>
+
+          <el-form-item label="输出单价/1k" prop="outputPricePer1k">
+            <el-input-number
+              v-model="formData.outputPricePer1k"
+              :min="0"
+              :step="0.000001"
+              :precision="6"
+              style="width: 100%"
+            />
+            <div class="form-tip">每 1k 输出 token 的计费价格</div>
+          </el-form-item>
+
+          <el-form-item label="货币" prop="currency">
+            <el-input v-model="formData.currency" placeholder="例如: CNY / USD / JPY" />
           </el-form-item>
 
           <el-form-item label="API密钥" prop="apiKey" :required="formData.provider !== 'custom'">
@@ -317,11 +375,15 @@
         apiKey: '',
         baseUrl: '',
         modelName: '',
+        modelVersion: 'default',
         modelType: 'CHAT',
         temperature: 0.0,
         maxTokens: 2000,
         completionsPath: '',
         embeddingsPath: '',
+        inputPricePer1k: 0,
+        outputPricePer1k: 0,
+        currency: 'CNY',
         isActive: false,
       });
 
@@ -373,6 +435,40 @@
             trigger: 'blur',
           },
         ],
+        inputPricePer1k: [
+          {
+            type: 'number',
+            min: 0,
+            message: '输入单价必须大于等于0',
+            trigger: 'blur',
+          },
+        ],
+        outputPricePer1k: [
+          {
+            type: 'number',
+            min: 0,
+            message: '输出单价必须大于等于0',
+            trigger: 'blur',
+          },
+        ],
+        currency: [
+          {
+            validator: (_rule, value, callback) => {
+              const hasPricing =
+                formData.value.inputPricePer1k != null || formData.value.outputPricePer1k != null;
+              if (!hasPricing) {
+                callback();
+                return;
+              }
+              if (!value || value.trim() === '') {
+                callback(new Error('请输入货币单位'));
+                return;
+              }
+              callback();
+            },
+            trigger: 'blur',
+          },
+        ],
       };
 
       // 计算属性
@@ -412,11 +508,15 @@
           apiKey: '',
           baseUrl: '',
           modelName: '',
+          modelVersion: 'default',
           modelType: 'CHAT',
           temperature: 0.0,
           maxTokens: 2000,
           completionsPath: '',
           embeddingsPath: '',
+          inputPricePer1k: 0,
+          outputPricePer1k: 0,
+          currency: 'CNY',
           isActive: false,
         };
         dialogVisible.value = true;

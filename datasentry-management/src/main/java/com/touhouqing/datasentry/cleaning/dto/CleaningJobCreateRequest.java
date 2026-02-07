@@ -48,6 +48,8 @@ public class CleaningJobCreateRequest {
 
 	private String reviewPolicy;
 
+	private Map<String, Object> backupPolicy;
+
 	private Map<String, Object> writebackMapping;
 
 	private Integer batchSize;

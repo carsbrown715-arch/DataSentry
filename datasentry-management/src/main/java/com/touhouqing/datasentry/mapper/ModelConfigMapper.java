@@ -16,7 +16,12 @@
 package com.touhouqing.datasentry.mapper;
 
 import com.touhouqing.datasentry.entity.ModelConfig;
-import org.apache.ibatis.annotations.*;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
@@ -24,24 +29,56 @@ import java.util.List;
 public interface ModelConfigMapper {
 
 	@Select("""
-			SELECT id, provider, base_url, api_key, model_name, temperature, is_active, max_tokens, model_type, completions_path, embeddings_path, created_time, updated_time, is_deleted FROM datasentry_model_config WHERE is_deleted = 0 ORDER BY created_time DESC
+			SELECT id, provider, base_url, api_key, model_name, model_version, input_price_per_1k, output_price_per_1k,
+			       currency, pricing_source, pricing_updated_at, temperature, is_active, max_tokens, model_type,
+			       completions_path, embeddings_path, created_time, updated_time, is_deleted
+			FROM datasentry_model_config
+			WHERE is_deleted = 0
+			ORDER BY created_time DESC
 			""")
 	List<ModelConfig> findAll();
 
 	@Select("""
-			SELECT id, provider, base_url, api_key, model_name, temperature, is_active, max_tokens, model_type, completions_path, embeddings_path, created_time, updated_time, is_deleted FROM datasentry_model_config WHERE id = #{id} AND is_deleted = 0
+			SELECT id, provider, base_url, api_key, model_name, model_version, input_price_per_1k, output_price_per_1k,
+			       currency, pricing_source, pricing_updated_at, temperature, is_active, max_tokens, model_type,
+			       completions_path, embeddings_path, created_time, updated_time, is_deleted
+			FROM datasentry_model_config
+			WHERE id = #{id} AND is_deleted = 0
 			""")
 	ModelConfig findById(Long id);
 
-	@Select("SELECT id, provider, base_url, api_key, model_name, temperature, is_active, max_tokens, model_type, completions_path, embeddings_path, created_time, updated_time, is_deleted FROM datasentry_model_config WHERE model_type = #{modelType} AND is_active = 1 AND is_deleted = 0 LIMIT 1")
+	@Select("""
+			SELECT id, provider, base_url, api_key, model_name, model_version, input_price_per_1k, output_price_per_1k,
+			       currency, pricing_source, pricing_updated_at, temperature, is_active, max_tokens, model_type,
+			       completions_path, embeddings_path, created_time, updated_time, is_deleted
+			FROM datasentry_model_config
+			WHERE model_type = #{modelType} AND is_active = 1 AND is_deleted = 0
+			LIMIT 1
+			""")
 	ModelConfig selectActiveByType(@Param("modelType") String modelType);
+
+	@Select("""
+			SELECT id, provider, base_url, api_key, model_name, model_version, input_price_per_1k, output_price_per_1k,
+			       currency, pricing_source, pricing_updated_at, temperature, is_active, max_tokens, model_type,
+			       completions_path, embeddings_path, created_time, updated_time, is_deleted
+			FROM datasentry_model_config
+			WHERE provider = #{provider}
+			  AND model_name = #{modelName}
+			  AND is_deleted = 0
+			ORDER BY updated_time DESC, id DESC
+			LIMIT 1
+			""")
+	ModelConfig findByProviderAndModelName(@Param("provider") String provider, @Param("modelName") String modelName);
 
 	@Update("UPDATE datasentry_model_config SET is_active = 0 WHERE model_type = #{modelType} AND id != #{currentId} AND is_deleted = 0")
 	void deactivateOthers(@Param("modelType") String modelType, @Param("currentId") Long currentId);
 
 	@Select("""
 			<script>
-				SELECT id, provider, base_url, api_key, model_name, temperature, is_active, max_tokens, model_type, completions_path, embeddings_path, created_time, updated_time, is_deleted FROM datasentry_model_config
+				SELECT id, provider, base_url, api_key, model_name, model_version, input_price_per_1k, output_price_per_1k,
+				       currency, pricing_source, pricing_updated_at, temperature, is_active, max_tokens, model_type,
+				       completions_path, embeddings_path, created_time, updated_time, is_deleted
+				FROM datasentry_model_config
 				<where>
 					is_deleted = 0
 					<if test='provider != null and provider != ""'>
@@ -70,8 +107,14 @@ public interface ModelConfigMapper {
 			@Param("modelType") String modelType);
 
 	@Insert("""
-			INSERT INTO datasentry_model_config (provider, base_url, api_key, model_name, temperature, is_active, max_tokens, model_type, completions_path, embeddings_path, created_time, updated_time, is_deleted)
-			VALUES (#{provider}, #{baseUrl}, #{apiKey}, #{modelName}, #{temperature}, #{isActive}, #{maxTokens}, #{modelType}, #{completionsPath}, #{embeddingsPath}, NOW(), NOW(), 0)
+			INSERT INTO datasentry_model_config
+			(provider, base_url, api_key, model_name, model_version, input_price_per_1k, output_price_per_1k,
+			 currency, pricing_source, pricing_updated_at, temperature, is_active, max_tokens, model_type,
+			 completions_path, embeddings_path, created_time, updated_time, is_deleted)
+			VALUES
+			(#{provider}, #{baseUrl}, #{apiKey}, #{modelName}, #{modelVersion}, #{inputPricePer1k},
+			 #{outputPricePer1k}, #{currency}, #{pricingSource}, #{pricingUpdatedAt}, #{temperature}, #{isActive},
+			 #{maxTokens}, #{modelType}, #{completionsPath}, #{embeddingsPath}, NOW(), NOW(), 0)
 			""")
 	@Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
 	int insert(ModelConfig modelConfig);
@@ -84,6 +127,12 @@ public interface ModelConfigMapper {
 			            <if test='baseUrl != null'>base_url = #{baseUrl},</if>
 			            <if test='apiKey != null'>api_key = #{apiKey},</if>
 			            <if test='modelName != null'>model_name = #{modelName},</if>
+			            <if test='modelVersion != null'>model_version = #{modelVersion},</if>
+			            <if test='inputPricePer1k != null'>input_price_per_1k = #{inputPricePer1k},</if>
+			            <if test='outputPricePer1k != null'>output_price_per_1k = #{outputPricePer1k},</if>
+			            <if test='currency != null'>currency = #{currency},</if>
+			            <if test='pricingSource != null'>pricing_source = #{pricingSource},</if>
+			            <if test='pricingUpdatedAt != null'>pricing_updated_at = #{pricingUpdatedAt},</if>
 			            <if test='temperature != null'>temperature = #{temperature},</if>
 			            <if test='isActive != null'>is_active = #{isActive},</if>
 			            <if test='maxTokens != null'>max_tokens = #{maxTokens},</if>

@@ -34,6 +34,16 @@ public class CleaningOptionMetaView {
 
 	private List<CleaningThresholdItemView> thresholdGuidance;
 
+	private Map<String, CleaningRuleTypeSchemaView> ruleTypeSchemas;
+
+	private Map<String, Map<String, Boolean>> ruleTypeUiBehavior;
+
+	private List<CleaningSeverityGuidanceItemView> severityGuidance;
+
+	private Map<String, String> riskConfirmations;
+
+	private List<CleaningOptionItemView> regexTemplates;
+
 	private Map<String, Object> jsonConfigTemplates;
 
 	private Map<String, String> fieldHelp;

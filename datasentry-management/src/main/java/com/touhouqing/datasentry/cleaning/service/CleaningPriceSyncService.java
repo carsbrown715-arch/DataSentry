@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPricingSyncResult;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningPriceCatalogMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningPriceCatalog;
+import com.touhouqing.datasentry.entity.ModelConfig;
+import com.touhouqing.datasentry.mapper.ModelConfigMapper;
 import com.touhouqing.datasentry.properties.DataSentryProperties;
 import com.touhouqing.datasentry.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
@@ -29,9 +31,13 @@ public class CleaningPriceSyncService {
 
 	private static final String CODE_PRICING_SYNC_FAILED = "PRICING_SYNC_FAILED";
 
+	private static final String PRICING_SOURCE_MANUAL = "MANUAL";
+
 	private final DataSentryProperties dataSentryProperties;
 
 	private final CleaningPriceCatalogMapper priceCatalogMapper;
+
+	private final ModelConfigMapper modelConfigMapper;
 
 	private final CleaningOpsStateService opsStateService;
 
@@ -50,6 +56,12 @@ public class CleaningPriceSyncService {
 			List<DataSentryProperties.Cleaning.Pricing.PriceItem> sourceItems = loadSourceItems(sourceType);
 			for (DataSentryProperties.Cleaning.Pricing.PriceItem item : sourceItems) {
 				if (item == null || isBlank(item.getProvider()) || isBlank(item.getModel())) {
+					skipped++;
+					continue;
+				}
+				if (isManualPricingProtected(item.getProvider(), item.getModel())) {
+					log.info("Skip pricing sync for manual model config provider={} model={}", item.getProvider(),
+							item.getModel());
 					skipped++;
 					continue;
 				}
@@ -143,6 +155,17 @@ public class CleaningPriceSyncService {
 
 	public boolean isSyncEnabled() {
 		return dataSentryProperties.getCleaning().getPricing().isSyncEnabled();
+	}
+
+	private boolean isManualPricingProtected(String provider, String model) {
+		ModelConfig modelConfig = modelConfigMapper.findByProviderAndModelName(provider, model);
+		if (modelConfig == null) {
+			return false;
+		}
+		if (!PRICING_SOURCE_MANUAL.equalsIgnoreCase(safeString(modelConfig.getPricingSource()))) {
+			return false;
+		}
+		return modelConfig.getInputPricePer1k() != null && modelConfig.getOutputPricePer1k() != null;
 	}
 
 	private List<DataSentryProperties.Cleaning.Pricing.PriceItem> loadSourceItems(String sourceType) throws Exception {

@@ -36,6 +36,7 @@ public class ModelConfigConverter {
 			.provider(entity.getProvider())
 			.baseUrl(entity.getBaseUrl())
 			.modelName(entity.getModelName())
+			.modelVersion(entity.getModelVersion())
 			.temperature(entity.getTemperature())
 			.maxTokens(entity.getMaxTokens())
 			.isActive(entity.getIsActive())
@@ -43,6 +44,10 @@ public class ModelConfigConverter {
 			.modelType(entity.getModelType().getCode())
 			.completionsPath(entity.getCompletionsPath())
 			.embeddingsPath(entity.getEmbeddingsPath())
+			.inputPricePer1k(entity.getInputPricePer1k())
+			.outputPricePer1k(entity.getOutputPricePer1k())
+			.currency(entity.getCurrency())
+			.pricingSource(entity.getPricingSource())
 			.build();
 	}
 
@@ -59,11 +64,16 @@ public class ModelConfigConverter {
 		// 新增时，DTO 里的 Key 肯定是明文，直接存
 		entity.setApiKey(dto.getApiKey());
 		entity.setModelName(dto.getModelName());
+		entity.setModelVersion(dto.getModelVersion());
 		entity.setTemperature(dto.getTemperature());
 		entity.setMaxTokens(dto.getMaxTokens());
 		entity.setModelType(ModelType.fromCode(dto.getModelType()));
 		entity.setCompletionsPath(dto.getCompletionsPath());
 		entity.setEmbeddingsPath(dto.getEmbeddingsPath());
+		entity.setInputPricePer1k(dto.getInputPricePer1k());
+		entity.setOutputPricePer1k(dto.getOutputPricePer1k());
+		entity.setCurrency(dto.getCurrency());
+		entity.setPricingSource(dto.getPricingSource());
 		// 默认值处理
 		entity.setIsActive(false);
 		entity.setIsDeleted(0);

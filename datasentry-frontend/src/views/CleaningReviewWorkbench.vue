@@ -28,7 +28,7 @@
               <el-option label="失败" value="FAILED" />
             </el-select>
             <el-input v-model="filters.jobRunId" placeholder="Job Run ID" style="width: 200px" />
-            <el-button type="primary" @click="loadReviews">查询</el-button>
+            <el-button type="primary" @click="handleQuery">查询</el-button>
           </div>
           <div class="bulk-row">
             <el-button
@@ -78,12 +78,20 @@
             <el-table-column prop="jobRunId" label="Run ID" width="120" />
             <el-table-column prop="tableName" label="表名" min-width="160" />
             <el-table-column prop="columnName" label="字段" min-width="140" />
-            <el-table-column prop="verdict" label="判定" width="120" />
-            <el-table-column prop="actionSuggested" label="建议动作" width="140" />
+            <el-table-column label="判定" width="120">
+              <template #default="scope">
+                {{ formatVerdict(scope.row.verdict) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="建议动作" width="140">
+              <template #default="scope">
+                {{ formatActionSuggested(scope.row.actionSuggested) }}
+              </template>
+            </el-table-column>
             <el-table-column label="状态" width="120">
               <template #default="scope">
                 <el-tag :type="statusTag(scope.row.status)" size="small">
-                  {{ scope.row.status }}
+                  {{ formatReviewStatus(scope.row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -111,6 +119,18 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="pagination-bar">
+            <el-pagination
+              v-model:current-page="pagination.pageNum"
+              v-model:page-size="pagination.pageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :small="false"
+              layout="total, sizes, prev, pager, next, jumper"
+              :total="pagination.total"
+              @size-change="handlePageSizeChange"
+              @current-change="handlePageChange"
+            />
+          </div>
         </el-card>
       </main>
 
@@ -127,7 +147,7 @@
             </div>
             <div>
               <strong>建议动作</strong>
-              <span>{{ currentTask.actionSuggested }}</span>
+              <span>{{ formatActionSuggested(currentTask.actionSuggested) }}</span>
             </div>
           </div>
           <div class="diff-grid">
@@ -163,6 +183,13 @@
     jobRunId: '',
   });
 
+  const pagination = ref({
+    pageNum: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0,
+  });
+
   const statusTag = status => {
     if (status === 'PENDING') return 'warning';
     if (status === 'WRITTEN') return 'success';
@@ -172,20 +199,87 @@
     return 'info';
   };
 
-  const loadReviews = async () => {
+  const reviewStatusLabelMap = {
+    PENDING: '待审核',
+    APPROVED: '已通过',
+    REJECTED: '已拒绝',
+    WRITTEN: '已写回',
+    CONFLICT: '冲突',
+    FAILED: '失败',
+  };
+
+  const verdictLabelMap = {
+    ALLOW: '放行',
+    BLOCK: '拦截',
+    REVIEW: '人审',
+    REDACTED: '已脱敏',
+  };
+
+  const actionLabelMap = {
+    NONE: '不处理',
+    WRITEBACK: '写回',
+    SOFT_DELETE: '软删除',
+    BLOCK_ONLY: '仅阻断',
+  };
+
+  const formatReviewStatus = status => reviewStatusLabelMap[status] || status || '-';
+
+  const formatVerdict = verdict => verdictLabelMap[verdict] || verdict || '-';
+
+  const formatActionSuggested = action => actionLabelMap[action] || action || '-';
+
+  const loadReviews = async (resetPage = false) => {
+    if (resetPage) {
+      pagination.value.pageNum = 1;
+    }
     loading.value = true;
     try {
-      const params = {};
+      const params = {
+        pageNum: pagination.value.pageNum,
+        pageSize: pagination.value.pageSize,
+      };
       if (filters.value.status) params.status = filters.value.status;
       if (filters.value.jobRunId) {
-        params.jobRunId = Number(filters.value.jobRunId);
+        const jobRunId = Number(filters.value.jobRunId);
+        if (!Number.isNaN(jobRunId)) {
+          params.jobRunId = jobRunId;
+        }
       }
-      reviews.value = await cleaningService.listReviews(params);
+      const pageResult = await cleaningService.listReviews(params);
+      reviews.value = pageResult?.data || [];
+      pagination.value.total = pageResult?.total || 0;
+      pagination.value.pageNum = pageResult?.pageNum || pagination.value.pageNum;
+      pagination.value.pageSize = pageResult?.pageSize || pagination.value.pageSize;
+      pagination.value.totalPages = pageResult?.totalPages || 0;
+      if (
+        pagination.value.totalPages > 0 &&
+        pagination.value.pageNum > pagination.value.totalPages
+      ) {
+        pagination.value.pageNum = pagination.value.totalPages;
+        await loadReviews(false);
+        return;
+      }
+      selectedRows.value = [];
     } catch (error) {
       ElMessage.error('加载审核任务失败');
     } finally {
       loading.value = false;
     }
+  };
+
+  const handleQuery = async () => {
+    await loadReviews(true);
+  };
+
+  const handlePageChange = async pageNum => {
+    pagination.value.pageNum = pageNum;
+    await loadReviews(false);
+  };
+
+  const handlePageSizeChange = async pageSize => {
+    pagination.value.pageSize = pageSize;
+    pagination.value.pageNum = 1;
+    await loadReviews(false);
   };
 
   const handleSelectionChange = rows => {
@@ -465,6 +559,12 @@
     gap: 0.75rem;
     align-items: center;
     flex-wrap: wrap;
+  }
+
+  .pagination-bar {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .detail-body {

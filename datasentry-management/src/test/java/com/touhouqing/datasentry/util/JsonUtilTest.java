@@ -15,20 +15,28 @@
  */
 package com.touhouqing.datasentry.util;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import com.touhouqing.datasentry.cleaning.model.CleaningRule;
+import org.junit.jupiter.api.Test;
 
-public class JsonUtil {
+import java.time.LocalDateTime;
 
-	private static final ObjectMapper objectMapper = new ObjectMapper();
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-	static {
-		objectMapper.findAndRegisterModules();
-		objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-	}
+public class JsonUtilTest {
 
-	public static ObjectMapper getObjectMapper() {
-		return objectMapper;
+	@Test
+	public void shouldSerializeLocalDateTimeFields() throws Exception {
+		CleaningRule rule = CleaningRule.builder()
+			.id(1L)
+			.name("test")
+			.createdTime(LocalDateTime.of(2026, 2, 7, 21, 0))
+			.updatedTime(LocalDateTime.of(2026, 2, 7, 21, 1))
+			.build();
+
+		String json = JsonUtil.getObjectMapper().writeValueAsString(rule);
+
+		assertTrue(json.contains("\"createdTime\""));
+		assertTrue(json.contains("2026-02-07 21:00:00"));
 	}
 
 }

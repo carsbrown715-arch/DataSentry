@@ -20,6 +20,7 @@ import com.touhouqing.datasentry.entity.Datasource;
 import com.touhouqing.datasentry.exception.InvalidInputException;
 import com.touhouqing.datasentry.service.datasource.DatasourceService;
 import com.touhouqing.datasentry.util.JsonUtil;
+import com.touhouqing.datasentry.vo.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,12 @@ public class CleaningReviewService {
 
 	private static final int BULK_LIMIT = 5000;
 
+	private static final int DEFAULT_PAGE_NUM = 1;
+
+	private static final int DEFAULT_PAGE_SIZE = 20;
+
+	private static final int MAX_PAGE_SIZE = 200;
+
 	private final CleaningReviewTaskMapper reviewTaskMapper;
 
 	private final CleaningBackupRecordMapper backupRecordMapper;
@@ -58,19 +65,39 @@ public class CleaningReviewService {
 
 	private final DBConnectionPoolFactory connectionPoolFactory;
 
-	public List<CleaningReviewTask> listReviews(String status, Long jobRunId, Long agentId) {
-		LambdaQueryWrapper<CleaningReviewTask> wrapper = new LambdaQueryWrapper<CleaningReviewTask>()
-			.orderByDesc(CleaningReviewTask::getCreatedTime);
+	public PageResult<CleaningReviewTask> listReviews(String status, Long jobRunId, Long agentId, Integer pageNum,
+			Integer pageSize) {
+		int safePageNum = pageNum != null && pageNum > 0 ? pageNum : DEFAULT_PAGE_NUM;
+		int safePageSize = pageSize != null && pageSize > 0 ? Math.min(pageSize, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+		LambdaQueryWrapper<CleaningReviewTask> countWrapper = new LambdaQueryWrapper<>();
 		if (status != null && !status.isBlank()) {
-			wrapper.eq(CleaningReviewTask::getStatus, status);
+			countWrapper.eq(CleaningReviewTask::getStatus, status);
 		}
 		if (jobRunId != null) {
-			wrapper.eq(CleaningReviewTask::getJobRunId, jobRunId);
+			countWrapper.eq(CleaningReviewTask::getJobRunId, jobRunId);
 		}
 		if (agentId != null) {
-			wrapper.eq(CleaningReviewTask::getAgentId, agentId);
+			countWrapper.eq(CleaningReviewTask::getAgentId, agentId);
 		}
-		return reviewTaskMapper.selectList(wrapper);
+		Long total = reviewTaskMapper.selectCount(countWrapper);
+		long safeTotal = total != null ? total : 0L;
+		long offset = Math.max(0L, (long) (safePageNum - 1) * safePageSize);
+		LambdaQueryWrapper<CleaningReviewTask> listWrapper = new LambdaQueryWrapper<CleaningReviewTask>()
+			.orderByDesc(CleaningReviewTask::getCreatedTime);
+		if (status != null && !status.isBlank()) {
+			listWrapper.eq(CleaningReviewTask::getStatus, status);
+		}
+		if (jobRunId != null) {
+			listWrapper.eq(CleaningReviewTask::getJobRunId, jobRunId);
+		}
+		if (agentId != null) {
+			listWrapper.eq(CleaningReviewTask::getAgentId, agentId);
+		}
+		listWrapper.last("LIMIT " + offset + "," + safePageSize);
+		List<CleaningReviewTask> data = reviewTaskMapper.selectList(listWrapper);
+		PageResult<CleaningReviewTask> result = new PageResult<>(data, safeTotal, safePageNum, safePageSize, 0);
+		result.calculateTotalPages();
+		return result;
 	}
 
 	public CleaningReviewTask getReview(Long id) {
@@ -203,8 +230,14 @@ public class CleaningReviewService {
 		if (task == null) {
 			throw new InvalidInputException("Review task not found");
 		}
+		if ("BLOCK_ONLY".equals(task.getActionSuggested())) {
+			updateStatus(task.getId(), CleaningReviewStatus.WRITTEN.name(), reviewer, reason);
+			appendReviewRecord(task, task.getActionSuggested());
+			return reviewTaskMapper.selectById(task.getId());
+		}
 		if (encryptionService.isEncryptionEnabled() && !encryptionService.hasValidKey()) {
-			updateStatus(task.getId(), CleaningReviewStatus.FAILED.name(), reviewer, "Missing backup master key");
+			updateStatus(task.getId(), CleaningReviewStatus.FAILED.name(), reviewer,
+					encryptionService.missingKeyHint());
 			return reviewTaskMapper.selectById(task.getId());
 		}
 		Map<String, Object> beforeRow = parseJsonMap(task.getBeforeRowJson());

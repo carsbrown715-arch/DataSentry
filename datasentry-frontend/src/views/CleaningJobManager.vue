@@ -54,8 +54,16 @@
 
           <el-table :data="jobs" stripe v-loading="loadingJobs">
             <el-table-column prop="id" label="ID" width="90" />
-            <el-table-column prop="agentId" label="智能体" width="100" />
-            <el-table-column prop="datasourceId" label="数据源" width="100" />
+            <el-table-column label="智能体" min-width="160">
+              <template #default="scope">
+                {{ formatAgentDisplay(scope.row.agentId) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="数据源" min-width="160">
+              <template #default="scope">
+                {{ formatDatasourceDisplay(scope.row.datasourceId) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="tableName" label="表" min-width="160" />
             <el-table-column label="目标模式" min-width="180">
               <template #default="scope">
@@ -64,18 +72,19 @@
             </el-table-column>
             <el-table-column label="预算" min-width="220">
               <template #default="scope">
-                <span>{{ scope.row.budgetEnabled === 1 ? '启用' : '关闭' }}</span>
-                <span v-if="scope.row.budgetEnabled === 1">
-                  / {{ scope.row.budgetSoftLimit }} - {{ scope.row.budgetHardLimit }}
-                </span>
+                {{ formatJobBudget(scope.row) }}
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="260" fixed="right">
+            <el-table-column label="操作" width="360" fixed="right">
               <template #default="scope">
                 <el-button size="small" type="primary" @click="createRun(scope.row)">
                   启动运行
                 </el-button>
                 <el-button size="small" @click="selectJob(scope.row)">查看运行</el-button>
+                <el-button size="small" @click="openEditDialog(scope.row)">编辑</el-button>
+                <el-button size="small" type="danger" plain @click="removeJob(scope.row)">
+                  删除
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -111,8 +120,16 @@
             <el-table-column prop="totalScanned" label="扫描" width="100" />
             <el-table-column prop="totalFlagged" label="命中" width="100" />
             <el-table-column prop="actualCost" label="成本" width="120" />
-            <el-table-column prop="budgetStatus" label="预算状态" width="140" />
-            <el-table-column prop="budgetMessage" label="预算信息" min-width="180" />
+            <el-table-column label="预算状态" width="140">
+              <template #default="scope">
+                {{ formatBudgetStatus(scope.row.budgetStatus) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="预算信息" min-width="180">
+              <template #default="scope">
+                {{ formatBudgetMessage(scope.row.budgetStatus, scope.row.budgetMessage) }}
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="360" fixed="right">
               <template #default="scope">
                 <el-button size="small" @click="loadBudget(scope.row)">预算</el-button>
@@ -129,255 +146,335 @@
           </el-table>
         </el-card>
 
-        <el-dialog v-model="createDialogVisible" title="新建清理任务" width="760px">
-          <el-form :model="createForm" label-width="130px">
-            <el-form-item label="智能体">
-              <el-select
-                v-model="createForm.agentId"
-                filterable
-                style="width: 100%"
-                placeholder="请选择智能体"
-              >
-                <el-option
-                  v-for="agent in agents"
-                  :key="agent.id"
-                  :label="agent.name || `Agent-${agent.id}`"
-                  :value="agent.id"
-                />
-              </el-select>
-            </el-form-item>
+        <el-dialog
+          v-model="createDialogVisible"
+          :title="isEditMode ? '编辑清理任务' : '新建清理任务'"
+          width="860px"
+        >
+          <el-steps :active="createStep" finish-status="success" simple class="create-steps">
+            <el-step title="1. 选择数据范围" />
+            <el-step title="2. 选择清理对象" />
+            <el-step title="3. 设置风险控制" />
+            <el-step title="4. 确认并创建" />
+          </el-steps>
 
-            <el-form-item label="数据源">
-              <el-select
-                v-model="createForm.datasourceId"
-                filterable
-                style="width: 100%"
-                placeholder="请选择数据源"
-              >
-                <el-option
-                  v-for="ds in datasources"
-                  :key="ds.id"
-                  :label="ds.name || `Datasource-${ds.id}`"
-                  :value="ds.id"
-                />
-              </el-select>
-            </el-form-item>
+          <el-form :model="createForm" label-width="130px" class="step-form">
+            <template v-if="createStep === 0">
+              <el-alert
+                type="info"
+                :closable="false"
+                show-icon
+                class="inline-alert"
+                title="先确定 Agent、数据源、表和策略，后续步骤会自动联动字段。"
+              />
 
-            <el-form-item label="表名">
-              <el-select
-                v-model="createForm.tableName"
-                filterable
-                clearable
-                style="width: 100%"
-                :loading="loadingTables"
-                placeholder="请选择表"
-              >
-                <el-option
-                  v-for="table in tableOptions"
-                  :key="table"
-                  :label="table"
-                  :value="table"
-                />
-              </el-select>
-            </el-form-item>
+              <el-form-item label="智能体">
+                <el-select
+                  v-model="createForm.agentId"
+                  filterable
+                  style="width: 100%"
+                  placeholder="请选择智能体"
+                >
+                  <el-option
+                    v-for="agent in agents"
+                    :key="agent.id"
+                    :label="agent.name || `Agent-${agent.id}`"
+                    :value="agent.id"
+                  />
+                </el-select>
+              </el-form-item>
 
-            <el-form-item label="策略">
-              <el-select
-                v-model="createForm.policyId"
-                filterable
-                clearable
-                style="width: 100%"
-                placeholder="请选择策略"
-              >
-                <el-option
-                  v-for="policy in policies"
-                  :key="policy.id"
-                  :label="`${policy.name} (#${policy.id})`"
-                  :value="policy.id"
-                />
-              </el-select>
-            </el-form-item>
+              <el-form-item label="数据源">
+                <el-select
+                  v-model="createForm.datasourceId"
+                  filterable
+                  style="width: 100%"
+                  placeholder="请选择数据源"
+                >
+                  <el-option
+                    v-for="ds in datasources"
+                    :key="ds.id"
+                    :label="ds.name || `Datasource-${ds.id}`"
+                    :value="ds.id"
+                  />
+                </el-select>
+              </el-form-item>
 
-            <el-form-item label="主键列">
-              <el-select
-                v-model="createForm.pkColumns"
-                multiple
-                filterable
-                clearable
-                collapse-tags
-                collapse-tags-tooltip
-                style="width: 100%"
-                :loading="loadingColumns"
-                placeholder="请选择主键列"
-              >
-                <el-option
-                  v-for="column in tableColumns"
-                  :key="`pk-${column}`"
-                  :label="column"
-                  :value="column"
-                />
-              </el-select>
-            </el-form-item>
+              <el-form-item label="表名">
+                <el-select
+                  v-model="createForm.tableName"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  :loading="loadingTables"
+                  placeholder="请选择表"
+                >
+                  <el-option
+                    v-for="table in tableOptions"
+                    :key="table"
+                    :label="table"
+                    :value="table"
+                  />
+                </el-select>
+              </el-form-item>
 
-            <el-form-item label="目标列">
-              <el-select
-                v-model="createForm.targetColumns"
-                multiple
-                filterable
-                clearable
-                collapse-tags
-                collapse-tags-tooltip
-                style="width: 100%"
-                :loading="loadingColumns"
-                placeholder="请选择目标列"
-              >
-                <el-option
-                  v-for="column in tableColumns"
-                  :key="`target-${column}`"
-                  :label="column"
-                  :value="column"
-                />
-              </el-select>
-            </el-form-item>
+              <el-form-item label="策略">
+                <el-select
+                  v-model="createForm.policyId"
+                  filterable
+                  clearable
+                  style="width: 100%"
+                  placeholder="请选择策略"
+                >
+                  <el-option
+                    v-for="policy in policies"
+                    :key="policy.id"
+                    :label="`${policy.name} (#${policy.id})`"
+                    :value="policy.id"
+                  />
+                </el-select>
+              </el-form-item>
+            </template>
 
-            <el-form-item label="目标模式">
-              <el-select v-model="createForm.targetConfigType" style="width: 180px">
-                <el-option
-                  v-for="item in targetConfigTypeOptions"
-                  :key="item.code"
-                  :label="formatOptionLabel(item)"
-                  :value="item.code"
-                />
-              </el-select>
-              <div class="field-help">{{ getFieldHelp('job.targetConfigType') }}</div>
-            </el-form-item>
+            <template v-if="createStep === 1">
+              <el-alert
+                type="info"
+                :closable="false"
+                show-icon
+                class="inline-alert"
+                title="选择主键列和目标列，并决定按整列清理还是 JSONPath 定位清理。"
+              />
 
-            <el-form-item v-if="createForm.targetConfigType === 'JSONPATH'" label="JSONPath 配置">
-              <div class="jsonpath-panel">
-                <div class="jsonpath-toolbar">
-                  <el-button
-                    size="small"
-                    type="primary"
-                    plain
-                    :disabled="createForm.targetColumns.length === 0"
-                    @click="fillJsonPathTemplates"
-                  >
-                    模板填充
-                  </el-button>
-                </div>
-                <div v-if="createForm.targetColumns.length === 0" class="jsonpath-empty">
-                  请先选择目标列
-                </div>
-                <div v-else class="jsonpath-list">
-                  <div
-                    v-for="column in createForm.targetColumns"
-                    :key="column"
-                    class="jsonpath-item"
-                  >
-                    <span class="jsonpath-column">{{ column }}</span>
-                    <el-input v-model="jsonPathMappings[column]" placeholder="例如：$.text.body" />
+              <el-form-item label="主键列">
+                <el-select
+                  v-model="createForm.pkColumns"
+                  multiple
+                  filterable
+                  clearable
+                  collapse-tags
+                  collapse-tags-tooltip
+                  style="width: 100%"
+                  :loading="loadingColumns"
+                  placeholder="请选择主键列"
+                >
+                  <el-option
+                    v-for="column in tableColumns"
+                    :key="`pk-${column}`"
+                    :label="column"
+                    :value="column"
+                  />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="目标列">
+                <el-select
+                  v-model="createForm.targetColumns"
+                  multiple
+                  filterable
+                  clearable
+                  collapse-tags
+                  collapse-tags-tooltip
+                  style="width: 100%"
+                  :loading="loadingColumns"
+                  placeholder="请选择目标列"
+                >
+                  <el-option
+                    v-for="column in tableColumns"
+                    :key="`target-${column}`"
+                    :label="column"
+                    :value="column"
+                  />
+                </el-select>
+              </el-form-item>
+
+              <el-form-item label="目标模式">
+                <el-select v-model="createForm.targetConfigType" style="width: 220px">
+                  <el-option
+                    v-for="item in targetConfigTypeOptions"
+                    :key="item.code"
+                    :label="formatOptionLabel(item)"
+                    :value="item.code"
+                  />
+                </el-select>
+                <div class="field-help">{{ getFieldHelp('job.targetConfigType') }}</div>
+              </el-form-item>
+
+              <el-form-item v-if="createForm.targetConfigType === 'JSONPATH'" label="JSONPath 配置">
+                <div class="jsonpath-panel">
+                  <div class="jsonpath-toolbar">
+                    <el-button
+                      size="small"
+                      type="primary"
+                      plain
+                      :disabled="createForm.targetColumns.length === 0"
+                      @click="fillJsonPathTemplates"
+                    >
+                      模板填充
+                    </el-button>
+                  </div>
+                  <div v-if="createForm.targetColumns.length === 0" class="jsonpath-empty">
+                    请先选择目标列
+                  </div>
+                  <div v-else class="jsonpath-list">
+                    <div
+                      v-for="column in createForm.targetColumns"
+                      :key="column"
+                      class="jsonpath-item"
+                    >
+                      <span class="jsonpath-column">{{ column }}</span>
+                      <el-input
+                        v-model="jsonPathMappings[column]"
+                        placeholder="例如：$.text.body"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            </el-form-item>
+              </el-form-item>
+            </template>
 
-            <el-divider content-position="left">高级配置</el-divider>
-
-            <el-alert
-              v-if="isBeginnerMode"
-              type="info"
-              :closable="false"
-              show-icon
-              class="inline-alert"
-              title="新手建议先用：试运行 + 不写回 + 有风险时人审。"
-            />
-
-            <el-form-item label="运行模式">
-              <el-select v-model="createForm.mode" style="width: 220px">
-                <el-option
-                  v-for="item in jobModeOptions"
-                  :key="item.code"
-                  :label="formatOptionLabel(item)"
-                  :value="item.code"
-                />
-              </el-select>
-              <div class="field-help">{{ getFieldHelp('job.mode') }}</div>
-            </el-form-item>
-
-            <el-form-item label="写回模式">
-              <el-select v-model="createForm.writebackMode" style="width: 220px">
-                <el-option
-                  v-for="item in writebackModeOptions"
-                  :key="item.code"
-                  :label="formatOptionLabel(item)"
-                  :value="item.code"
-                />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item label="人审策略">
-              <el-select v-model="createForm.reviewPolicy" style="width: 220px">
-                <el-option
-                  v-for="item in reviewPolicyOptions"
-                  :key="item.code"
-                  :label="formatOptionLabel(item)"
-                  :value="item.code"
-                />
-              </el-select>
-              <div class="field-help">{{ getFieldHelp('job.reviewPolicy') }}</div>
-            </el-form-item>
-
-            <el-form-item label="whereSql">
-              <el-input
-                v-model="createForm.whereSql"
-                type="textarea"
-                :autosize="{ minRows: 2, maxRows: 4 }"
-                placeholder="可选：例如 status = 'ACTIVE'"
+            <template v-if="createStep === 2">
+              <el-alert
+                v-if="isBeginnerMode"
+                type="info"
+                :closable="false"
+                show-icon
+                class="inline-alert"
+                title="新手建议先用：试运行 + 不写回 + 有风险时人审。"
               />
-              <div class="field-help">{{ getFieldHelp('job.whereSql') }}</div>
-            </el-form-item>
 
-            <el-alert
-              v-if="createForm.whereSql && isRiskyWhereSql(createForm.whereSql)"
-              type="warning"
-              :closable="false"
-              show-icon
-              class="where-sql-alert"
-              title="whereSql 检测到高风险关键词（DROP/DELETE/TRUNCATE/UPDATE...），请确认仅用于筛选条件。"
-            />
+              <el-form-item label="运行模式">
+                <el-select v-model="createForm.mode" style="width: 240px">
+                  <el-option
+                    v-for="item in jobModeOptions"
+                    :key="item.code"
+                    :label="formatOptionLabel(item)"
+                    :value="item.code"
+                  />
+                </el-select>
+                <div class="field-help">{{ getFieldHelp('job.mode') }}</div>
+              </el-form-item>
 
-            <el-form-item label="在线 Fail-Closed">
-              <el-switch v-model="createForm.onlineFailClosedEnabled" />
-            </el-form-item>
+              <el-form-item label="写回模式">
+                <el-select v-model="createForm.writebackMode" style="width: 240px">
+                  <el-option
+                    v-for="item in writebackModeOptions"
+                    :key="item.code"
+                    :label="formatOptionLabel(item)"
+                    :value="item.code"
+                  />
+                </el-select>
+              </el-form-item>
 
-            <el-form-item label="在线 Token 上限">
-              <el-input-number v-model="createForm.onlineRequestTokenLimit" :min="1" :step="100" />
-            </el-form-item>
+              <el-form-item label="人审策略">
+                <el-select v-model="createForm.reviewPolicy" style="width: 240px">
+                  <el-option
+                    v-for="item in reviewPolicyOptions"
+                    :key="item.code"
+                    :label="formatOptionLabel(item)"
+                    :value="item.code"
+                  />
+                </el-select>
+                <div class="field-help">{{ getFieldHelp('job.reviewPolicy') }}</div>
+              </el-form-item>
 
-            <el-form-item label="写回映射(JSON)">
-              <el-input
-                v-model="createForm.writebackMappingJson"
-                type="textarea"
-                :autosize="{ minRows: 3, maxRows: 8 }"
-                placeholder='例如：{"masked_phone":"phone"}'
+              <el-form-item v-if="createForm.reviewPolicy !== 'NEVER'" label="BLOCK 进人审">
+                <el-switch v-model="createForm.reviewBlockOnRisk" />
+                <div class="field-help">
+                  当判定为 BLOCK 时，是否也创建人审任务；ALWAYS 默认开启。
+                </div>
+              </el-form-item>
+
+              <el-form-item label="筛选条件">
+                <el-input
+                  v-model="createForm.whereSql"
+                  type="textarea"
+                  :autosize="{ minRows: 2, maxRows: 4 }"
+                  placeholder="仅填写条件本身，例如：status = 'ACTIVE'（不要写 WHERE）"
+                />
+                <div class="field-help">{{ getFieldHelp('job.whereSql') }}</div>
+              </el-form-item>
+
+              <el-alert
+                v-if="createForm.whereSql && isRiskyWhereSql(createForm.whereSql)"
+                type="warning"
+                :closable="false"
+                show-icon
+                class="where-sql-alert"
+                title="检测到高风险关键词（DROP/DELETE/TRUNCATE/UPDATE...），请仅保留筛选条件。"
               />
-            </el-form-item>
 
-            <el-form-item label="预算启用">
-              <el-switch v-model="createForm.budgetEnabled" />
-              <div class="field-help">{{ getFieldHelp('job.budget') }}</div>
-            </el-form-item>
-            <el-form-item v-if="createForm.budgetEnabled" label="预算阈值">
-              <div class="budget-row">
-                <el-input-number v-model="createForm.budgetSoftLimit" :min="0" :step="1" />
-                <span>-</span>
-                <el-input-number v-model="createForm.budgetHardLimit" :min="0" :step="1" />
-              </div>
-            </el-form-item>
+              <el-form-item label="在线 Fail-Closed">
+                <el-switch v-model="createForm.onlineFailClosedEnabled" />
+              </el-form-item>
+
+              <el-form-item label="在线 Token 上限">
+                <el-input-number
+                  v-model="createForm.onlineRequestTokenLimit"
+                  :min="1"
+                  :step="100"
+                />
+              </el-form-item>
+
+              <el-form-item label="写回映射(JSON)">
+                <el-input
+                  v-model="createForm.writebackMappingJson"
+                  type="textarea"
+                  :autosize="{ minRows: 3, maxRows: 8 }"
+                  placeholder='例如：{"masked_phone":"phone"}'
+                />
+              </el-form-item>
+            </template>
+
+            <template v-if="createStep === 3">
+              <el-alert
+                type="info"
+                :closable="false"
+                show-icon
+                class="inline-alert"
+                :title="getFieldHelp('job.wizard')"
+              />
+
+              <el-form-item label="预算启用">
+                <el-switch v-model="createForm.budgetEnabled" />
+                <div class="field-help">{{ getFieldHelp('job.budget') }}</div>
+              </el-form-item>
+              <el-form-item v-if="createForm.budgetEnabled" label="预算阈值">
+                <div class="budget-row">
+                  <el-input-number v-model="createForm.budgetSoftLimit" :min="0" :step="1" />
+                  <span>-</span>
+                  <el-input-number v-model="createForm.budgetHardLimit" :min="0" :step="1" />
+                </div>
+              </el-form-item>
+
+              <el-descriptions :column="1" border class="summary-block">
+                <el-descriptions-item label="执行对象">
+                  Agent #{{ createForm.agentId || '-' }} / 数据源 #{{
+                    createForm.datasourceId || '-'
+                  }}
+                  /
+                  {{ createForm.tableName || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="策略与模式">
+                  策略 #{{ createForm.policyId || '-' }} / {{ createForm.mode }} /
+                  {{ createForm.writebackMode }}
+                </el-descriptions-item>
+                <el-descriptions-item label="目标配置">
+                  {{ createForm.targetConfigType }} / 主键 {{ createForm.pkColumns.length }} 列 /
+                  目标 {{ createForm.targetColumns.length }} 列
+                </el-descriptions-item>
+              </el-descriptions>
+            </template>
           </el-form>
+
           <template #footer>
             <el-button @click="createDialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitCreate">创建</el-button>
+            <el-button v-if="createStep > 0" @click="prevCreateStep">上一步</el-button>
+            <el-button v-if="createStep < 3" type="primary" @click="nextCreateStep">
+              下一步
+            </el-button>
+            <el-button v-else type="primary" @click="submitCreate">
+              {{ isEditMode ? '保存修改' : '创建任务' }}
+            </el-button>
           </template>
         </el-dialog>
 
@@ -396,10 +493,10 @@
               {{ budgetView.actualCost }}
             </el-descriptions-item>
             <el-descriptions-item label="预算状态">
-              {{ formatRunStatusShort(budgetView.budgetStatus) }}
+              {{ formatBudgetStatus(budgetView.budgetStatus) }}
             </el-descriptions-item>
             <el-descriptions-item label="预算信息">
-              {{ budgetView.budgetMessage }}
+              {{ formatBudgetMessage(budgetView.budgetStatus, budgetView.budgetMessage) }}
             </el-descriptions-item>
           </el-descriptions>
         </el-dialog>
@@ -420,7 +517,7 @@
               {{ rollbackRun.totalFailed || 0 }}
             </el-descriptions-item>
             <el-descriptions-item label="创建时间">
-              {{ rollbackRun.createdTime }}
+              {{ formatDateTime(rollbackRun.createdTime) }}
             </el-descriptions-item>
           </el-descriptions>
           <template #footer>
@@ -437,7 +534,7 @@
 
 <script setup>
   import { computed, onMounted, reactive, ref, watch } from 'vue';
-  import { ElMessage } from 'element-plus';
+  import { ElMessage, ElMessageBox } from 'element-plus';
   import { Plus, Refresh } from '@element-plus/icons-vue';
   import BaseLayout from '@/layouts/BaseLayout.vue';
   import cleaningMetaService from '@/services/cleaningMeta';
@@ -476,7 +573,10 @@
   });
 
   const createDialogVisible = ref(false);
-  const createForm = reactive({
+  const createStep = ref(0);
+  const editingJobId = ref(null);
+
+  const defaultCreateForm = () => ({
     agentId: undefined,
     datasourceId: undefined,
     tableName: '',
@@ -487,6 +587,7 @@
     mode: 'DRY_RUN',
     writebackMode: 'NONE',
     reviewPolicy: 'NEVER',
+    reviewBlockOnRisk: false,
     whereSql: '',
     onlineFailClosedEnabled: true,
     onlineRequestTokenLimit: 4000,
@@ -496,10 +597,13 @@
     budgetHardLimit: 50,
   });
 
+  const createForm = reactive(defaultCreateForm());
+
   const uiMode = ref(readCleaningUiMode());
   const optionMeta = ref(mergeOptionsWithFallback(null));
 
   const isBeginnerMode = computed(() => uiMode.value === UI_MODE_BEGINNER);
+  const isEditMode = computed(() => editingJobId.value !== null);
   const targetConfigTypeOptions = computed(() => optionMeta.value.targetConfigTypes || []);
   const reviewPolicyOptions = computed(() => optionMeta.value.reviewPolicies || []);
   const jobModeOptions = computed(() => optionMeta.value.jobModes || []);
@@ -520,8 +624,64 @@
     return `${item.labelZh || item.code}（${item.code}）`;
   };
 
+  const formatAgentDisplay = agentId => {
+    if (!agentId) {
+      return '-';
+    }
+    const matched = agents.value.find(agent => Number(agent.id) === Number(agentId));
+    return matched?.name || `Agent-${agentId}`;
+  };
+
+  const formatDatasourceDisplay = datasourceId => {
+    if (!datasourceId) {
+      return '-';
+    }
+    const matched = datasources.value.find(ds => Number(ds.id) === Number(datasourceId));
+    return matched?.name || `数据源-${datasourceId}`;
+  };
+
   const formatTargetConfigType = code => buildOptionLabel(code, targetConfigTypeOptions.value);
   const formatRunStatusShort = code => getOptionLabelZh(code, runStatusOptions.value);
+  const formatDateTime = value => {
+    if (!value) {
+      return '-';
+    }
+    return String(value).replace('T', ' ');
+  };
+  const formatBudgetStatus = status => {
+    const labels = {
+      NORMAL: '正常',
+      SOFT_EXCEEDED: '软超限',
+      HARD_EXCEEDED: '硬超限',
+    };
+    return labels[status] || status || '-';
+  };
+
+  const formatBudgetMessage = (status, message) => {
+    if (message && String(message).trim()) {
+      return message;
+    }
+    if (status === 'NORMAL') {
+      return '预算正常';
+    }
+    if (status === 'SOFT_EXCEEDED') {
+      return '预算达到软阈值';
+    }
+    if (status === 'HARD_EXCEEDED') {
+      return '预算超过硬阈值';
+    }
+    return '-';
+  };
+
+  const formatJobBudget = job => {
+    const budgetEnabled = Number(job?.budgetEnabled ?? 1) === 1;
+    if (!budgetEnabled) {
+      return '关闭';
+    }
+    const softLimit = job?.budgetSoftLimit ?? '--';
+    const hardLimit = job?.budgetHardLimit ?? '--';
+    return `启用 / ${softLimit} - ${hardLimit}`;
+  };
 
   const getFieldHelp = key => optionMeta.value.fieldHelp?.[key] || '';
 
@@ -538,6 +698,43 @@
     Object.keys(jsonPathMappings).forEach(key => {
       delete jsonPathMappings[key];
     });
+  };
+
+  const resetCreateForm = () => {
+    Object.assign(createForm, defaultCreateForm());
+    createStep.value = 0;
+    editingJobId.value = null;
+    resetJsonPathMappings();
+  };
+
+  const parseJsonObject = (text, fallback = {}) => {
+    if (!text || typeof text !== 'string') {
+      return { ...fallback };
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      return { ...fallback };
+    }
+    return { ...fallback };
+  };
+
+  const parseJsonStringArray = text => {
+    if (!text || typeof text !== 'string') {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) {
+        return parsed.map(item => String(item || '').trim()).filter(item => item.length > 0);
+      }
+    } catch (error) {
+      return [];
+    }
+    return [];
   };
 
   const buildDefaultJsonPath = column => `$.${column}`;
@@ -678,6 +875,15 @@
         agentId: filters.agentId,
         enabled: filters.enabled,
       });
+      if (selectedJob.value?.id) {
+        const refreshedSelected = jobs.value.find(item => item.id === selectedJob.value.id);
+        if (refreshedSelected) {
+          selectedJob.value = refreshedSelected;
+        } else {
+          selectedJob.value = null;
+          runs.value = [];
+        }
+      }
     } catch (error) {
       ElMessage.error('加载任务失败');
     } finally {
@@ -756,10 +962,160 @@
     },
   );
 
+  watch(
+    () => createForm.reviewPolicy,
+    reviewPolicy => {
+      if (reviewPolicy === 'ALWAYS') {
+        createForm.reviewBlockOnRisk = true;
+      } else if (reviewPolicy === 'NEVER') {
+        createForm.reviewBlockOnRisk = false;
+      }
+    },
+  );
+
+  const validateStep0 = () => {
+    if (
+      !createForm.agentId ||
+      !createForm.datasourceId ||
+      !createForm.tableName ||
+      !createForm.policyId
+    ) {
+      ElMessage.error('请先填写 Agent、数据源、表和策略');
+      return false;
+    }
+    return true;
+  };
+
+  const validateStep1 = () => {
+    if (createForm.pkColumns.length === 0) {
+      ElMessage.error('请至少选择一个主键列');
+      return false;
+    }
+    if (createForm.targetColumns.length === 0) {
+      ElMessage.error('请至少选择一个目标列');
+      return false;
+    }
+    if (createForm.targetConfigType === 'JSONPATH' && !buildJsonPathTargetConfig()) {
+      return false;
+    }
+    return true;
+  };
+
+  const nextCreateStep = () => {
+    if (createStep.value === 0 && !validateStep0()) {
+      return;
+    }
+    if (createStep.value === 1 && !validateStep1()) {
+      return;
+    }
+    createStep.value = Math.min(createStep.value + 1, 3);
+  };
+
+  const prevCreateStep = () => {
+    createStep.value = Math.max(createStep.value - 1, 0);
+  };
+
   const openCreateDialog = async () => {
+    resetCreateForm();
     createDialogVisible.value = true;
     if (policies.value.length === 0) {
       await loadPolicies();
+    }
+  };
+
+  const openEditDialog = async job => {
+    resetCreateForm();
+    editingJobId.value = job.id;
+    createDialogVisible.value = true;
+
+    if (policies.value.length === 0) {
+      await loadPolicies();
+    }
+
+    createForm.agentId = job.agentId;
+    createForm.datasourceId = job.datasourceId;
+    await loadTables(job.datasourceId);
+
+    createForm.tableName = job.tableName || '';
+    await loadColumns(job.datasourceId, createForm.tableName);
+
+    const normalizeColumns = columns => {
+      if (!Array.isArray(columns)) {
+        return [];
+      }
+      if (tableColumns.value.length === 0) {
+        return columns;
+      }
+      return columns.filter(column => tableColumns.value.includes(column));
+    };
+
+    const pkColumns = normalizeColumns(parseJsonStringArray(job.pkColumnsJson));
+    const targetColumns = normalizeColumns(parseJsonStringArray(job.targetColumnsJson));
+
+    createForm.policyId = job.policyId;
+    createForm.pkColumns = pkColumns;
+    createForm.targetColumns = targetColumns;
+    createForm.targetConfigType = job.targetConfigType || 'COLUMNS';
+    createForm.mode = job.mode || 'DRY_RUN';
+    createForm.writebackMode = job.writebackMode || 'NONE';
+    createForm.reviewPolicy = job.reviewPolicy || 'NEVER';
+    createForm.whereSql = job.whereSql || '';
+
+    const targetConfig = parseJsonObject(job.targetConfigJson);
+    const backupPolicy = parseJsonObject(job.backupPolicyJson);
+    const writebackMapping = parseJsonObject(job.writebackMappingJson);
+
+    resetJsonPathMappings();
+    if (createForm.targetConfigType === 'JSONPATH') {
+      createForm.targetColumns.forEach(column => {
+        const rawPath = targetConfig?.[column];
+        const path =
+          typeof rawPath === 'string' && rawPath.trim()
+            ? rawPath.trim()
+            : buildDefaultJsonPath(column);
+        jsonPathMappings[column] = path;
+      });
+    }
+
+    createForm.reviewBlockOnRisk =
+      createForm.reviewPolicy === 'ALWAYS' || Boolean(backupPolicy.reviewBlockOnRisk);
+    createForm.onlineFailClosedEnabled = Number(job.onlineFailClosedEnabled ?? 1) === 1;
+    createForm.onlineRequestTokenLimit =
+      Number.isFinite(Number(job.onlineRequestTokenLimit)) &&
+      Number(job.onlineRequestTokenLimit) > 0
+        ? Number(job.onlineRequestTokenLimit)
+        : 4000;
+    createForm.writebackMappingJson = JSON.stringify(writebackMapping, null, 2);
+    createForm.budgetEnabled = Number(job.budgetEnabled ?? 1) === 1;
+    createForm.budgetSoftLimit = Number.isFinite(Number(job.budgetSoftLimit))
+      ? Number(job.budgetSoftLimit)
+      : 10;
+    createForm.budgetHardLimit = Number.isFinite(Number(job.budgetHardLimit))
+      ? Number(job.budgetHardLimit)
+      : 50;
+  };
+
+  const removeJob = async job => {
+    try {
+      await ElMessageBox.confirm(`确认删除任务 #${job.id} 吗？`, '删除确认', {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+      });
+    } catch (error) {
+      return;
+    }
+
+    try {
+      await cleaningService.deleteJob(job.id);
+      if (selectedJob.value?.id === job.id) {
+        selectedJob.value = null;
+        runs.value = [];
+      }
+      await loadJobs();
+      ElMessage.success('任务已删除');
+    } catch (error) {
+      ElMessage.error('删除任务失败');
     }
   };
 
@@ -802,21 +1158,7 @@
   };
 
   const submitCreate = async () => {
-    if (
-      !createForm.agentId ||
-      !createForm.datasourceId ||
-      !createForm.tableName ||
-      !createForm.policyId
-    ) {
-      ElMessage.error('请先填写 Agent、数据源、表和策略');
-      return;
-    }
-    if (createForm.pkColumns.length === 0) {
-      ElMessage.error('请至少选择一个主键列');
-      return;
-    }
-    if (createForm.targetColumns.length === 0) {
-      ElMessage.error('请至少选择一个目标列');
+    if (!validateStep0() || !validateStep1()) {
       return;
     }
 
@@ -837,8 +1179,23 @@
       ElMessage.warning('whereSql 包含高风险关键词，请确认仅用于筛选条件。');
     }
 
+    if (createForm.mode === 'WRITEBACK' || createForm.writebackMode !== 'NONE') {
+      try {
+        const riskMessage =
+          optionMeta.value.riskConfirmations?.WRITEBACK ||
+          '正式写回会修改业务数据，建议先试运行验证。确认继续创建？';
+        await ElMessageBox.confirm(riskMessage, '写回风险确认', {
+          type: 'warning',
+          confirmButtonText: '继续创建',
+          cancelButtonText: '返回修改',
+        });
+      } catch (error) {
+        return;
+      }
+    }
+
     try {
-      await cleaningService.createJob({
+      const payload = {
         agentId: Number(createForm.agentId),
         datasourceId: Number(createForm.datasourceId),
         tableName: createForm.tableName,
@@ -850,6 +1207,9 @@
         mode: createForm.mode,
         writebackMode: createForm.writebackMode,
         reviewPolicy: createForm.reviewPolicy,
+        backupPolicy: {
+          reviewBlockOnRisk: createForm.reviewPolicy === 'ALWAYS' || createForm.reviewBlockOnRisk,
+        },
         whereSql: createForm.whereSql || undefined,
         onlineFailClosedEnabled: createForm.onlineFailClosedEnabled ? 1 : 0,
         onlineRequestTokenLimit: Number(createForm.onlineRequestTokenLimit),
@@ -857,12 +1217,23 @@
         budgetEnabled: createForm.budgetEnabled ? 1 : 0,
         budgetSoftLimit: createForm.budgetSoftLimit,
         budgetHardLimit: createForm.budgetHardLimit,
-      });
+      };
+
+      if (isEditMode.value && editingJobId.value !== null) {
+        await cleaningService.updateJob(editingJobId.value, payload);
+      } else {
+        await cleaningService.createJob(payload);
+      }
+
       createDialogVisible.value = false;
-      ElMessage.success('任务创建成功');
       await loadJobs();
+      if (selectedJob.value?.id) {
+        await loadRuns();
+      }
+      ElMessage.success(isEditMode.value ? '任务更新成功' : '任务创建成功');
+      editingJobId.value = null;
     } catch (error) {
-      ElMessage.error('创建任务失败，请检查输入');
+      ElMessage.error(isEditMode.value ? '更新任务失败，请检查输入' : '创建任务失败，请检查输入');
     }
   };
 
@@ -1052,6 +1423,18 @@
 
   .where-sql-alert {
     margin-bottom: 12px;
+  }
+
+  .create-steps {
+    margin-bottom: 14px;
+  }
+
+  .step-form {
+    margin-top: 12px;
+  }
+
+  .summary-block {
+    margin-top: 10px;
   }
 
   .field-help {

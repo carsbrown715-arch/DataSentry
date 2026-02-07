@@ -27,6 +27,15 @@ public class CleaningBackupEncryptionService {
 		}
 	}
 
+	public String missingKeyHint() {
+		String envName = dataSentryProperties.getCleaning().getBackup().getMasterKeyEnv();
+		if (envName == null || envName.isBlank()) {
+			envName = "DATASENTRY_BACKUP_MASTER_KEY";
+		}
+		return "缺少备份主密钥，请配置环境变量 " + envName
+				+ "（Base64 编码后长度 32 字节），或关闭 spring.ai.alibaba.datasentry.cleaning.backup.encrypt";
+	}
+
 	public String encrypt(String plaintext) {
 		byte[] key = resolveKey();
 		if (key == null) {

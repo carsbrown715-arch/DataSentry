@@ -54,7 +54,7 @@ public class CleaningRollbackService {
 			throw new InvalidInputException("Job run not found");
 		}
 		if (encryptionService.isEncryptionEnabled() && !encryptionService.hasValidKey()) {
-			throw new InvalidInputException("Missing backup master key");
+			throw new InvalidInputException(encryptionService.missingKeyHint());
 		}
 		LocalDateTime now = LocalDateTime.now();
 		CleaningRollbackRun rollbackRun = CleaningRollbackRun.builder()

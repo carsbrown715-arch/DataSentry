@@ -65,7 +65,7 @@ spring:
             default-batch-size: 200
           backup:
             storage: METADB
-            encrypt: true
+            encrypt: false
             master-key-env: DATASENTRY_BACKUP_MASTER_KEY
             provider: LOCAL_AES_GCM
           l2:
@@ -123,3 +123,4 @@ logging:
     com.touhouqing.datasentry.workflow.node: debug
     com.alibaba.cloud.ai.mapper: debug
     org.springframework.jdbc: debug
+    org.springframework.jdbc.datasource.DataSourceUtils: info

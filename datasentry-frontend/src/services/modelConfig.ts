@@ -23,12 +23,17 @@ export interface ModelConfig {
   apiKey: string;
   baseUrl: string;
   modelName: string;
+  modelVersion?: string;
   modelType: string; // "CHAT" or "EMBEDDING"
   temperature?: number;
   maxTokens?: number;
   isActive?: boolean;
   completionsPath?: string; // 对话模型路径
   embeddingsPath?: string; // 嵌入模型路径
+  inputPricePer1k?: number;
+  outputPricePer1k?: number;
+  currency?: string;
+  pricingSource?: string;
 }
 
 export interface ModelCheckReady {
@@ -53,7 +58,6 @@ class ModelConfigService {
    * @param config 模型配置对象
    */
   async add(config: Omit<ModelConfig, 'id'>): Promise<ApiResponse<string>> {
-    console.log('config: ' + config);
     const response = await axios.post<ApiResponse<string>>(`${API_BASE_URL}/add`, config);
     return response.data;
   }

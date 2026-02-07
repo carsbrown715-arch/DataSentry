@@ -6,6 +6,8 @@ import com.touhouqing.datasentry.cleaning.dto.CleaningReviewDecisionRequest;
 import com.touhouqing.datasentry.cleaning.model.CleaningReviewTask;
 import com.touhouqing.datasentry.cleaning.service.CleaningReviewService;
 import com.touhouqing.datasentry.vo.ApiResponse;
+import com.touhouqing.datasentry.vo.PageResponse;
+import com.touhouqing.datasentry.vo.PageResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,10 +23,14 @@ public class CleaningReviewController {
 	private final CleaningReviewService reviewService;
 
 	@GetMapping("/reviews")
-	public ResponseEntity<ApiResponse<List<CleaningReviewTask>>> listReviews(
+	public ResponseEntity<PageResponse<List<CleaningReviewTask>>> listReviews(
 			@RequestParam(required = false) String status, @RequestParam(required = false) Long jobRunId,
-			@RequestParam(required = false) Long agentId) {
-		return ResponseEntity.ok(ApiResponse.success("success", reviewService.listReviews(status, jobRunId, agentId)));
+			@RequestParam(required = false) Long agentId, @RequestParam(required = false) Integer pageNum,
+			@RequestParam(required = false) Integer pageSize) {
+		PageResult<CleaningReviewTask> pageResult = reviewService.listReviews(status, jobRunId, agentId, pageNum,
+				pageSize);
+		return ResponseEntity.ok(PageResponse.success("success", pageResult.getData(), pageResult.getTotal(),
+				pageResult.getPageNum(), pageResult.getPageSize(), pageResult.getTotalPages()));
 	}
 
 	@GetMapping("/reviews/{id}")

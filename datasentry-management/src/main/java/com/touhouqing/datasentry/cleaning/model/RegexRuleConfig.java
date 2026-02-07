@@ -11,8 +11,16 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class RegexRuleConfig {
 
+	public static final String MASK_MODE_PLACEHOLDER = "PLACEHOLDER";
+
+	public static final String MASK_MODE_DELETE = "DELETE";
+
 	private String pattern;
 
 	private String flags;
+
+	private String maskMode;
+
+	private String maskText;
 
 }
