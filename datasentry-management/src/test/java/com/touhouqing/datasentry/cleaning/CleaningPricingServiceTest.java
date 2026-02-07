@@ -87,14 +87,13 @@ public class CleaningPricingServiceTest {
 		when(modelConfigMapper.selectActiveByType("CHAT")).thenReturn(activeChatConfig);
 		CleaningPricingService service = new CleaningPricingService(mapper, modelConfigMapper);
 
-		CleaningPricingService.Pricing pricing =
-				service.resolvePricing(CleaningPricingService.DEFAULT_PROVIDER, CleaningPricingService.DEFAULT_MODEL);
+		CleaningPricingService.Pricing pricing = service.resolvePricing(CleaningPricingService.DEFAULT_PROVIDER,
+				CleaningPricingService.DEFAULT_MODEL);
 
 		assertEquals("deepseek", pricing.provider());
 		assertEquals("deepseek-chat", pricing.model());
 		assertEquals(new BigDecimal("0.111111"), pricing.inputPricePer1k());
 		assertEquals(new BigDecimal("0.222222"), pricing.outputPricePer1k());
 	}
-
 
 }

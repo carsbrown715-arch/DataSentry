@@ -72,6 +72,7 @@ public class CleaningPricingService {
 		return new Pricing(resolvedProvider, resolvedModel, safePrice(modelConfig.getInputPricePer1k()),
 				safePrice(modelConfig.getOutputPricePer1k()), currency);
 	}
+
 	private Pricing resolvePricingFromCatalog(String provider, String model) {
 		CleaningPriceCatalog catalog = priceCatalogMapper.findLatestByProviderAndModel(provider, model);
 		if (catalog == null) {
