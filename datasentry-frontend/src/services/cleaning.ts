@@ -274,6 +274,41 @@ export interface CleaningAlertView {
   createdTime?: string;
 }
 
+export interface CleaningOptionItem {
+  code: string;
+  labelZh?: string;
+  description?: string;
+  effect?: string;
+  riskLevel?: string;
+  recommendedFor?: string;
+  caution?: string;
+  configSchemaHint?: string;
+  sampleConfig?: Record<string, unknown>;
+}
+
+export interface CleaningThresholdItem {
+  code: string;
+  labelZh?: string;
+  defaultValue?: number;
+  description?: string;
+  recommendedRange?: string;
+}
+
+export interface CleaningOptionMetaView {
+  defaultActions?: CleaningOptionItem[];
+  ruleTypes?: CleaningOptionItem[];
+  ruleCategories?: CleaningOptionItem[];
+  reviewPolicies?: CleaningOptionItem[];
+  jobModes?: CleaningOptionItem[];
+  writebackModes?: CleaningOptionItem[];
+  runStatuses?: CleaningOptionItem[];
+  verdicts?: CleaningOptionItem[];
+  targetConfigTypes?: CleaningOptionItem[];
+  thresholdGuidance?: CleaningThresholdItem[];
+  jsonConfigTemplates?: Record<string, unknown>;
+  fieldHelp?: Record<string, string>;
+}
+
 export interface CleaningCheckRequest {
   text: string;
   scene?: string;
@@ -408,6 +443,13 @@ class CleaningService {
   async listAlerts(): Promise<CleaningAlertView[]> {
     const response = await axios.get<ApiResponse<CleaningAlertView[]>>(`${API_BASE_URL}/alerts`);
     return response.data.data || [];
+  }
+
+  async getOptionMeta(): Promise<CleaningOptionMetaView | null> {
+    const response = await axios.get<ApiResponse<CleaningOptionMetaView>>(
+      `${API_BASE_URL}/meta/options`,
+    );
+    return response.data.data || null;
   }
 
   async syncPricingNow(reason = 'manual'): Promise<CleaningPricingSyncResult | null> {

@@ -71,7 +71,7 @@ public class CleaningPolicyService {
 	public CleaningPolicy createPolicy(CleaningPolicyRequest request) {
 		LocalDateTime now = LocalDateTime.now();
 		CleaningPolicy policy = CleaningPolicy.builder()
-			.name(required(request.getName(), "Policy name is required"))
+			.name(required(request.getName(), "策略名称不能为空"))
 			.description(request.getDescription())
 			.enabled(request.getEnabled() != null ? request.getEnabled() : 1)
 			.defaultAction(request.getDefaultAction() != null ? request.getDefaultAction() : "DETECT_ONLY")
@@ -86,11 +86,11 @@ public class CleaningPolicyService {
 	public CleaningPolicy updatePolicy(Long policyId, CleaningPolicyRequest request) {
 		CleaningPolicy policy = policyMapper.selectById(policyId);
 		if (policy == null) {
-			throw new InvalidInputException("Policy not found");
+			throw new InvalidInputException("策略不存在");
 		}
 		LambdaUpdateWrapper<CleaningPolicy> wrapper = new LambdaUpdateWrapper<CleaningPolicy>()
 			.eq(CleaningPolicy::getId, policyId)
-			.set(CleaningPolicy::getName, required(request.getName(), "Policy name is required"))
+			.set(CleaningPolicy::getName, required(request.getName(), "策略名称不能为空"))
 			.set(CleaningPolicy::getDescription, request.getDescription())
 			.set(CleaningPolicy::getEnabled, request.getEnabled() != null ? request.getEnabled() : policy.getEnabled())
 			.set(CleaningPolicy::getDefaultAction,
@@ -112,9 +112,9 @@ public class CleaningPolicyService {
 	public CleaningRule createRule(CleaningRuleRequest request) {
 		LocalDateTime now = LocalDateTime.now();
 		CleaningRule rule = CleaningRule.builder()
-			.name(required(request.getName(), "Rule name is required"))
-			.ruleType(required(request.getRuleType(), "Rule type is required"))
-			.category(required(request.getCategory(), "Rule category is required"))
+			.name(required(request.getName(), "规则名称不能为空"))
+			.ruleType(required(request.getRuleType(), "规则类型不能为空"))
+			.category(required(request.getCategory(), "规则类别不能为空"))
 			.severity(request.getSeverity() != null ? request.getSeverity() : 0.8)
 			.enabled(request.getEnabled() != null ? request.getEnabled() : 1)
 			.configJson(toJson(request.getConfig()))
@@ -128,13 +128,13 @@ public class CleaningPolicyService {
 	public CleaningRule updateRule(Long ruleId, CleaningRuleRequest request) {
 		CleaningRule rule = ruleMapper.selectById(ruleId);
 		if (rule == null) {
-			throw new InvalidInputException("Rule not found");
+			throw new InvalidInputException("规则不存在");
 		}
 		LambdaUpdateWrapper<CleaningRule> wrapper = new LambdaUpdateWrapper<CleaningRule>()
 			.eq(CleaningRule::getId, ruleId)
-			.set(CleaningRule::getName, required(request.getName(), "Rule name is required"))
-			.set(CleaningRule::getRuleType, required(request.getRuleType(), "Rule type is required"))
-			.set(CleaningRule::getCategory, required(request.getCategory(), "Rule category is required"))
+			.set(CleaningRule::getName, required(request.getName(), "规则名称不能为空"))
+			.set(CleaningRule::getRuleType, required(request.getRuleType(), "规则类型不能为空"))
+			.set(CleaningRule::getCategory, required(request.getCategory(), "规则类别不能为空"))
 			.set(CleaningRule::getSeverity, request.getSeverity() != null ? request.getSeverity() : rule.getSeverity())
 			.set(CleaningRule::getEnabled, request.getEnabled() != null ? request.getEnabled() : rule.getEnabled())
 			.set(CleaningRule::getConfigJson, toJson(request.getConfig()))
@@ -149,7 +149,7 @@ public class CleaningPolicyService {
 
 	public void updatePolicyRules(Long policyId, CleaningPolicyRuleUpdateRequest request) {
 		if (policyMapper.selectById(policyId) == null) {
-			throw new InvalidInputException("Policy not found");
+			throw new InvalidInputException("策略不存在");
 		}
 		List<CleaningPolicyRuleItem> items = request.getRules() != null ? request.getRules() : List.of();
 		if (!items.isEmpty()) {
@@ -161,7 +161,7 @@ public class CleaningPolicyService {
 				List<CleaningRule> rules = ruleMapper
 					.selectList(new LambdaQueryWrapper<CleaningRule>().in(CleaningRule::getId, ruleIds));
 				if (rules.size() != ruleIds.size()) {
-					throw new InvalidInputException("Invalid rule binding");
+					throw new InvalidInputException("规则绑定中包含不存在的规则");
 				}
 			}
 		}
@@ -194,7 +194,7 @@ public class CleaningPolicyService {
 			return JsonUtil.getObjectMapper().writeValueAsString(value);
 		}
 		catch (Exception e) {
-			throw new InvalidInputException("Invalid json payload");
+			throw new InvalidInputException("JSON 配置格式非法");
 		}
 	}
 

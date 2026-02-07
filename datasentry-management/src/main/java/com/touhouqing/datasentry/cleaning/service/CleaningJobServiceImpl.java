@@ -210,7 +210,14 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 				return enumValue.name();
 			}
 		}
-		throw new InvalidInputException("Invalid enum value: " + value);
+		StringBuilder supportedValues = new StringBuilder();
+		for (Enum<?> enumValue : enumType.getEnumConstants()) {
+			if (supportedValues.length() > 0) {
+				supportedValues.append(", ");
+			}
+			supportedValues.append(enumValue.name());
+		}
+		throw new InvalidInputException("枚举值非法：" + value + "，支持值：" + supportedValues);
 	}
 
 	private Integer resolveBatchSize(Integer batchSize) {

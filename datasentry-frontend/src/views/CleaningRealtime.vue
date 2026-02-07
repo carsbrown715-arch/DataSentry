@@ -8,11 +8,24 @@
             <p class="content-subtitle">调用 check/sanitize 接口做在线链路联调与验收</p>
           </div>
           <div class="header-actions">
+            <CleaningModeSwitch @change="handleModeChange" />
             <el-button :icon="Refresh" :loading="loadingAgents" @click="loadAgents">
               刷新 Agent
             </el-button>
           </div>
         </div>
+
+        <el-alert
+          type="info"
+          show-icon
+          :closable="false"
+          class="intro-alert"
+          :title="
+            isBeginnerMode
+              ? '新手模式：字段中文化，并附带判定解释。'
+              : '专家模式：保留原始接口语义，便于精细调试。'
+          "
+        />
 
         <el-alert
           type="warning"
@@ -30,12 +43,12 @@
           </template>
 
           <el-form :model="form" label-width="120px">
-            <el-form-item label="Agent">
+            <el-form-item label="智能体">
               <el-select
                 v-model="form.agentId"
                 filterable
                 clearable
-                placeholder="请选择 Agent"
+                placeholder="请选择智能体"
                 style="width: 100%"
               >
                 <el-option
@@ -63,26 +76,45 @@
 
             <el-form-item label="调用类型">
               <el-radio-group v-model="form.action">
-                <el-radio-button label="check">check</el-radio-button>
-                <el-radio-button label="sanitize">sanitize</el-radio-button>
+                <el-radio-button label="check">仅检测（check）</el-radio-button>
+                <el-radio-button label="sanitize">检测并脱敏（sanitize）</el-radio-button>
               </el-radio-group>
+              <div class="field-help">{{ getFieldHelp('realtime.action') }}</div>
             </el-form-item>
 
-            <el-form-item label="Scene">
+            <el-form-item label="业务场景">
               <el-input v-model="form.scene" placeholder="可选：业务场景标识" />
+              <div class="field-help">{{ getFieldHelp('realtime.scene') }}</div>
             </el-form-item>
 
-            <el-form-item label="Policy ID">
+            <el-form-item label="策略 ID">
               <el-input-number v-model="form.policyId" :min="1" :step="1" />
+              <div class="field-help">{{ getFieldHelp('realtime.policyId') }}</div>
             </el-form-item>
 
-            <el-form-item label="Text">
+            <el-form-item label="待检测文本">
               <el-input
                 v-model="form.text"
                 type="textarea"
                 :autosize="{ minRows: 6, maxRows: 12 }"
                 placeholder="请输入待检测文本"
               />
+            </el-form-item>
+
+            <el-form-item label="快速示例">
+              <el-select
+                v-model="sampleText"
+                placeholder="选择示例文本"
+                clearable
+                @change="applySampleText"
+              >
+                <el-option
+                  v-for="item in sampleTextOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
             </el-form-item>
 
             <el-form-item>
@@ -114,10 +146,10 @@
             />
 
             <el-descriptions v-if="responseData" :column="1" border>
-              <el-descriptions-item label="Verdict">
-                {{ responseData.verdict || '-' }}
+              <el-descriptions-item label="判定结果">
+                {{ formatVerdict(responseData.verdict) }}
               </el-descriptions-item>
-              <el-descriptions-item label="Categories">
+              <el-descriptions-item label="风险类别">
                 <span v-if="!responseData.categories || responseData.categories.length === 0">
                   -
                 </span>
@@ -132,10 +164,19 @@
                   </el-tag>
                 </template>
               </el-descriptions-item>
-              <el-descriptions-item label="Sanitized Text">
+              <el-descriptions-item label="脱敏文本">
                 <pre class="result-text">{{ responseData.sanitizedText || '-' }}</pre>
               </el-descriptions-item>
             </el-descriptions>
+
+            <el-alert
+              v-if="responseData?.verdict"
+              class="response-guide"
+              type="info"
+              :closable="false"
+              show-icon
+              :title="verdictHint"
+            />
 
             <div v-if="responseRaw" class="raw-panel">
               <h4>Raw JSON</h4>
@@ -149,12 +190,21 @@
 </template>
 
 <script setup>
-  import { onMounted, reactive, ref } from 'vue';
+  import { computed, onMounted, reactive, ref } from 'vue';
   import { ElMessage } from 'element-plus';
   import { Refresh } from '@element-plus/icons-vue';
   import BaseLayout from '@/layouts/BaseLayout.vue';
   import agentService from '@/services/agent';
+  import cleaningMetaService from '@/services/cleaningMeta';
   import cleaningService from '@/services/cleaning';
+  import {
+    buildOptionLabel,
+    mergeOptionsWithFallback,
+    readCleaningUiMode,
+    UI_MODE_BEGINNER,
+    UI_MODE_EXPERT,
+  } from '@/constants/cleaningLabelMaps';
+  import CleaningModeSwitch from '@/components/cleaning/CleaningModeSwitch.vue';
 
   const STORAGE_KEY = 'datasentry.cleaning.realtime.api_key';
 
@@ -166,6 +216,10 @@
   const responseRaw = ref('');
   const responseError = ref('');
 
+  const uiMode = ref(readCleaningUiMode());
+  const optionMeta = ref(mergeOptionsWithFallback(null));
+  const sampleText = ref('');
+
   const form = reactive({
     agentId: undefined,
     apiKey: '',
@@ -175,6 +229,45 @@
     scene: '',
     policyId: undefined,
   });
+
+  const isBeginnerMode = computed(() => uiMode.value === UI_MODE_BEGINNER);
+  const verdictOptions = computed(() => optionMeta.value.verdicts || []);
+
+  const sampleTextOptions = [
+    { label: '手机号示例', value: '请联系我 13812345678 处理退款。' },
+    { label: '可疑推广示例', value: '点击链接 http://xxx.example 领取大奖，拉你进群。' },
+    { label: '正常文本示例', value: '今天的会议纪要我已经整理完毕，请查收。' },
+  ];
+
+  const verdictHint = computed(() => {
+    const verdict = responseData.value?.verdict;
+    if (!verdict) {
+      return '';
+    }
+    const matched = verdictOptions.value.find(item => item.code === verdict);
+    const defaultHelp = optionMeta.value.fieldHelp?.['realtime.verdict'] || '';
+    return matched?.description || defaultHelp;
+  });
+
+  const handleModeChange = mode => {
+    uiMode.value = mode === UI_MODE_EXPERT ? UI_MODE_EXPERT : UI_MODE_BEGINNER;
+  };
+
+  const getFieldHelp = key => optionMeta.value.fieldHelp?.[key] || '';
+
+  const formatVerdict = code => buildOptionLabel(code, verdictOptions.value);
+
+  const applySampleText = value => {
+    if (!value) {
+      return;
+    }
+    form.text = value;
+  };
+
+  const loadOptionMeta = async () => {
+    const remote = await cleaningMetaService.getOptions();
+    optionMeta.value = mergeOptionsWithFallback(remote);
+  };
 
   const loadAgents = async () => {
     loadingAgents.value = true;
@@ -274,6 +367,7 @@
       form.apiKey = cachedKey;
       form.rememberApiKey = true;
     }
+    await loadOptionMeta();
     await loadAgents();
   });
 </script>
@@ -306,6 +400,16 @@
   .content-subtitle {
     margin-top: 0.5rem;
     color: #64748b;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .intro-alert {
+    margin-bottom: 1rem;
   }
 
   .security-alert {
@@ -343,5 +447,16 @@
 
   .response-error {
     margin-bottom: 1rem;
+  }
+
+  .field-help {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .response-guide {
+    margin-top: 1rem;
   }
 </style>

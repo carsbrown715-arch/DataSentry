@@ -8,17 +8,30 @@
             <p class="content-subtitle">创建清理任务、启动运行并查看预算状态</p>
           </div>
           <div class="header-actions">
+            <CleaningModeSwitch @change="handleModeChange" />
             <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建任务</el-button>
             <el-button :icon="Refresh" @click="loadAll">刷新</el-button>
           </div>
         </div>
+
+        <el-alert
+          type="info"
+          show-icon
+          :closable="false"
+          class="intro-alert"
+          :title="
+            isBeginnerMode
+              ? '新手模式：默认以中文解释任务参数，并隐藏部分高级项。'
+              : '专家模式：显示完整参数，便于精细控制。'
+          "
+        />
 
         <el-card shadow="never" class="panel">
           <template #header>
             <div class="panel-header">
               <span>任务列表</span>
               <el-form inline>
-                <el-form-item label="Agent">
+                <el-form-item label="智能体">
                   <el-select v-model="filters.agentId" clearable filterable style="width: 180px">
                     <el-option
                       v-for="agent in agents"
@@ -41,10 +54,14 @@
 
           <el-table :data="jobs" stripe v-loading="loadingJobs">
             <el-table-column prop="id" label="ID" width="90" />
-            <el-table-column prop="agentId" label="Agent" width="100" />
+            <el-table-column prop="agentId" label="智能体" width="100" />
             <el-table-column prop="datasourceId" label="数据源" width="100" />
             <el-table-column prop="tableName" label="表" min-width="160" />
-            <el-table-column prop="targetConfigType" label="目标模式" width="120" />
+            <el-table-column label="目标模式" min-width="180">
+              <template #default="scope">
+                {{ formatTargetConfigType(scope.row.targetConfigType) }}
+              </template>
+            </el-table-column>
             <el-table-column label="预算" min-width="220">
               <template #default="scope">
                 <span>{{ scope.row.budgetEnabled === 1 ? '启用' : '关闭' }}</span>
@@ -56,9 +73,9 @@
             <el-table-column label="操作" width="260" fixed="right">
               <template #default="scope">
                 <el-button size="small" type="primary" @click="createRun(scope.row)">
-                  启动Run
+                  启动运行
                 </el-button>
-                <el-button size="small" @click="selectJob(scope.row)">查看Run</el-button>
+                <el-button size="small" @click="selectJob(scope.row)">查看运行</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -67,15 +84,16 @@
         <el-card shadow="never" class="panel" v-if="selectedJob">
           <template #header>
             <div class="panel-header">
-              <span>运行列表（Job #{{ selectedJob.id }}）</span>
+              <span>运行列表（任务 #{{ selectedJob.id }}）</span>
               <el-form inline>
                 <el-form-item label="状态">
                   <el-select v-model="runStatusFilter" clearable style="width: 140px">
-                    <el-option label="QUEUED" value="QUEUED" />
-                    <el-option label="RUNNING" value="RUNNING" />
-                    <el-option label="PAUSED" value="PAUSED" />
-                    <el-option label="SUCCEEDED" value="SUCCEEDED" />
-                    <el-option label="FAILED" value="FAILED" />
+                    <el-option
+                      v-for="item in runStatusOptions"
+                      :key="item.code"
+                      :label="formatOptionLabel(item)"
+                      :value="item.code"
+                    />
                   </el-select>
                 </el-form-item>
                 <el-button @click="loadRuns">查询</el-button>
@@ -84,8 +102,12 @@
           </template>
 
           <el-table :data="runs" stripe v-loading="loadingRuns">
-            <el-table-column prop="id" label="Run ID" width="110" />
-            <el-table-column prop="status" label="状态" width="110" />
+            <el-table-column prop="id" label="运行 ID" width="110" />
+            <el-table-column label="状态" width="130">
+              <template #default="scope">
+                {{ formatRunStatusShort(scope.row.status) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="totalScanned" label="扫描" width="100" />
             <el-table-column prop="totalFlagged" label="命中" width="100" />
             <el-table-column prop="actualCost" label="成本" width="120" />
@@ -109,12 +131,12 @@
 
         <el-dialog v-model="createDialogVisible" title="新建清理任务" width="760px">
           <el-form :model="createForm" label-width="130px">
-            <el-form-item label="Agent">
+            <el-form-item label="智能体">
               <el-select
                 v-model="createForm.agentId"
                 filterable
                 style="width: 100%"
-                placeholder="请选择 Agent"
+                placeholder="请选择智能体"
               >
                 <el-option
                   v-for="agent in agents"
@@ -220,9 +242,14 @@
 
             <el-form-item label="目标模式">
               <el-select v-model="createForm.targetConfigType" style="width: 180px">
-                <el-option label="COLUMNS" value="COLUMNS" />
-                <el-option label="JSONPATH" value="JSONPATH" />
+                <el-option
+                  v-for="item in targetConfigTypeOptions"
+                  :key="item.code"
+                  :label="formatOptionLabel(item)"
+                  :value="item.code"
+                />
               </el-select>
+              <div class="field-help">{{ getFieldHelp('job.targetConfigType') }}</div>
             </el-form-item>
 
             <el-form-item v-if="createForm.targetConfigType === 'JSONPATH'" label="JSONPath 配置">
@@ -256,27 +283,48 @@
 
             <el-divider content-position="left">高级配置</el-divider>
 
+            <el-alert
+              v-if="isBeginnerMode"
+              type="info"
+              :closable="false"
+              show-icon
+              class="inline-alert"
+              title="新手建议先用：试运行 + 不写回 + 有风险时人审。"
+            />
+
             <el-form-item label="运行模式">
               <el-select v-model="createForm.mode" style="width: 220px">
-                <el-option label="DRY_RUN" value="DRY_RUN" />
-                <el-option label="WRITEBACK" value="WRITEBACK" />
+                <el-option
+                  v-for="item in jobModeOptions"
+                  :key="item.code"
+                  :label="formatOptionLabel(item)"
+                  :value="item.code"
+                />
               </el-select>
+              <div class="field-help">{{ getFieldHelp('job.mode') }}</div>
             </el-form-item>
 
             <el-form-item label="写回模式">
               <el-select v-model="createForm.writebackMode" style="width: 220px">
-                <el-option label="NONE" value="NONE" />
-                <el-option label="UPDATE" value="UPDATE" />
-                <el-option label="SOFT_DELETE" value="SOFT_DELETE" />
+                <el-option
+                  v-for="item in writebackModeOptions"
+                  :key="item.code"
+                  :label="formatOptionLabel(item)"
+                  :value="item.code"
+                />
               </el-select>
             </el-form-item>
 
             <el-form-item label="人审策略">
               <el-select v-model="createForm.reviewPolicy" style="width: 220px">
-                <el-option label="NEVER" value="NEVER" />
-                <el-option label="ALWAYS" value="ALWAYS" />
-                <el-option label="ON_RISK" value="ON_RISK" />
+                <el-option
+                  v-for="item in reviewPolicyOptions"
+                  :key="item.code"
+                  :label="formatOptionLabel(item)"
+                  :value="item.code"
+                />
               </el-select>
+              <div class="field-help">{{ getFieldHelp('job.reviewPolicy') }}</div>
             </el-form-item>
 
             <el-form-item label="whereSql">
@@ -286,6 +334,7 @@
                 :autosize="{ minRows: 2, maxRows: 4 }"
                 placeholder="可选：例如 status = 'ACTIVE'"
               />
+              <div class="field-help">{{ getFieldHelp('job.whereSql') }}</div>
             </el-form-item>
 
             <el-alert
@@ -316,6 +365,7 @@
 
             <el-form-item label="预算启用">
               <el-switch v-model="createForm.budgetEnabled" />
+              <div class="field-help">{{ getFieldHelp('job.budget') }}</div>
             </el-form-item>
             <el-form-item v-if="createForm.budgetEnabled" label="预算阈值">
               <div class="budget-row">
@@ -346,7 +396,7 @@
               {{ budgetView.actualCost }}
             </el-descriptions-item>
             <el-descriptions-item label="预算状态">
-              {{ budgetView.budgetStatus }}
+              {{ formatRunStatusShort(budgetView.budgetStatus) }}
             </el-descriptions-item>
             <el-descriptions-item label="预算信息">
               {{ budgetView.budgetMessage }}
@@ -362,7 +412,9 @@
             <el-descriptions-item label="原 Run ID">
               {{ rollbackRun.jobRunId }}
             </el-descriptions-item>
-            <el-descriptions-item label="状态">{{ rollbackRun.status }}</el-descriptions-item>
+            <el-descriptions-item label="状态">
+              {{ formatRunStatusShort(rollbackRun.status) }}
+            </el-descriptions-item>
             <el-descriptions-item label="目标/成功/失败">
               {{ rollbackRun.totalTarget || 0 }} / {{ rollbackRun.totalSuccess || 0 }} /
               {{ rollbackRun.totalFailed || 0 }}
@@ -384,11 +436,21 @@
 </template>
 
 <script setup>
-  import { onMounted, reactive, ref, watch } from 'vue';
+  import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { ElMessage } from 'element-plus';
   import { Plus, Refresh } from '@element-plus/icons-vue';
   import BaseLayout from '@/layouts/BaseLayout.vue';
+  import cleaningMetaService from '@/services/cleaningMeta';
   import cleaningService from '@/services/cleaning';
+  import {
+    buildOptionLabel,
+    getOptionLabelZh,
+    mergeOptionsWithFallback,
+    readCleaningUiMode,
+    UI_MODE_BEGINNER,
+    UI_MODE_EXPERT,
+  } from '@/constants/cleaningLabelMaps';
+  import CleaningModeSwitch from '@/components/cleaning/CleaningModeSwitch.vue';
   import agentService from '@/services/agent';
   import datasourceService from '@/services/datasource';
 
@@ -433,6 +495,35 @@
     budgetSoftLimit: 10,
     budgetHardLimit: 50,
   });
+
+  const uiMode = ref(readCleaningUiMode());
+  const optionMeta = ref(mergeOptionsWithFallback(null));
+
+  const isBeginnerMode = computed(() => uiMode.value === UI_MODE_BEGINNER);
+  const targetConfigTypeOptions = computed(() => optionMeta.value.targetConfigTypes || []);
+  const reviewPolicyOptions = computed(() => optionMeta.value.reviewPolicies || []);
+  const jobModeOptions = computed(() => optionMeta.value.jobModes || []);
+  const writebackModeOptions = computed(() => optionMeta.value.writebackModes || []);
+  const runStatusOptions = computed(() => optionMeta.value.runStatuses || []);
+
+  const handleModeChange = mode => {
+    uiMode.value = mode === UI_MODE_EXPERT ? UI_MODE_EXPERT : UI_MODE_BEGINNER;
+  };
+
+  const formatOptionLabel = item => {
+    if (!item) {
+      return '-';
+    }
+    if (isBeginnerMode.value) {
+      return item.labelZh || item.code;
+    }
+    return `${item.labelZh || item.code}（${item.code}）`;
+  };
+
+  const formatTargetConfigType = code => buildOptionLabel(code, targetConfigTypeOptions.value);
+  const formatRunStatusShort = code => getOptionLabelZh(code, runStatusOptions.value);
+
+  const getFieldHelp = key => optionMeta.value.fieldHelp?.[key] || '';
 
   const jsonPathMappings = reactive({});
 
@@ -616,6 +707,11 @@
     if (selectedJob.value) {
       await loadRuns();
     }
+  };
+
+  const loadOptionMeta = async () => {
+    const remote = await cleaningMetaService.getOptions();
+    optionMeta.value = mergeOptionsWithFallback(remote);
   };
 
   watch(
@@ -856,6 +952,7 @@
   };
 
   onMounted(() => {
+    loadOptionMeta();
     loadAll();
   });
 </script>
@@ -892,7 +989,12 @@
 
   .header-actions {
     display: flex;
+    align-items: center;
     gap: 0.5rem;
+  }
+
+  .intro-alert {
+    margin-bottom: 1rem;
   }
 
   .panel {
@@ -949,6 +1051,17 @@
   }
 
   .where-sql-alert {
+    margin-bottom: 12px;
+  }
+
+  .field-help {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .inline-alert {
     margin-bottom: 12px;
   }
 </style>

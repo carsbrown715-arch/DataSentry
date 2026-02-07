@@ -8,6 +8,7 @@
             <p class="content-subtitle">管理清理策略、规则与优先级绑定</p>
           </div>
           <div class="header-actions">
+            <CleaningModeSwitch @change="handleModeChange" />
             <el-button type="primary" :icon="Plus" size="large" @click="openPolicyDialog()">
               新增策略
             </el-button>
@@ -15,13 +16,29 @@
           </div>
         </div>
 
+        <el-alert
+          type="info"
+          show-icon
+          :closable="false"
+          class="intro-alert"
+          :title="
+            isBeginnerMode
+              ? '新手模式：默认显示中文说明，帮助快速理解术语。'
+              : '专家模式：显示完整枚举值与底层配置。'
+          "
+        />
+
         <el-tabs v-model="activeTab" class="content-tabs">
           <el-tab-pane label="策略" name="policies">
             <el-card>
               <el-table :data="policies" style="width: 100%" stripe v-loading="loadingPolicies">
                 <el-table-column prop="id" label="ID" width="80" />
                 <el-table-column prop="name" label="策略名称" min-width="160" />
-                <el-table-column prop="defaultAction" label="默认动作" width="160" />
+                <el-table-column label="默认动作" min-width="220">
+                  <template #default="scope">
+                    {{ formatDefaultAction(scope.row.defaultAction) }}
+                  </template>
+                </el-table-column>
                 <el-table-column label="规则数" width="100">
                   <template #default="scope">
                     {{ scope.row.rules?.length || 0 }}
@@ -47,6 +64,7 @@
               </el-table>
             </el-card>
           </el-tab-pane>
+
           <el-tab-pane label="规则" name="rules">
             <el-card>
               <div class="rule-toolbar">
@@ -57,8 +75,16 @@
               <el-table :data="rules" style="width: 100%" stripe v-loading="loadingRules">
                 <el-table-column prop="id" label="ID" width="80" />
                 <el-table-column prop="name" label="规则名称" min-width="160" />
-                <el-table-column prop="ruleType" label="类型" width="120" />
-                <el-table-column prop="category" label="类别" width="140" />
+                <el-table-column label="类型" width="180">
+                  <template #default="scope">
+                    {{ formatRuleType(scope.row.ruleType) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="类别" width="180">
+                  <template #default="scope">
+                    {{ formatRuleCategory(scope.row.category) }}
+                  </template>
+                </el-table-column>
                 <el-table-column prop="severity" label="严重度" width="120" />
                 <el-table-column label="状态" width="100">
                   <template #default="scope">
@@ -86,32 +112,47 @@
       <el-dialog
         v-model="policyDialogVisible"
         :title="policyDialogTitle"
-        width="820px"
+        width="860px"
         :close-on-click-modal="false"
       >
-        <el-form :model="policyForm" label-width="110px" label-position="left">
+        <el-form :model="policyForm" label-width="120px" label-position="left">
           <el-form-item label="策略名称">
             <el-input v-model="policyForm.name" placeholder="请输入策略名称" />
           </el-form-item>
+
           <el-form-item label="策略描述">
             <el-input v-model="policyForm.description" placeholder="请输入描述" />
           </el-form-item>
+
           <el-form-item label="默认动作">
-            <el-select v-model="policyForm.defaultAction" placeholder="请选择">
-              <el-option label="DETECT_ONLY" value="DETECT_ONLY" />
-              <el-option label="SANITIZE_RETURN" value="SANITIZE_RETURN" />
-              <el-option label="SANITIZE_WRITEBACK" value="SANITIZE_WRITEBACK" />
-              <el-option label="REVIEW_THEN_WRITEBACK" value="REVIEW_THEN_WRITEBACK" />
-              <el-option label="DELETE" value="DELETE" />
+            <el-select v-model="policyForm.defaultAction" placeholder="请选择" style="width: 100%">
+              <el-option
+                v-for="item in defaultActionOptions"
+                :key="item.code"
+                :label="formatOptionLabel(item)"
+                :value="item.code"
+              />
             </el-select>
           </el-form-item>
+
+          <el-alert
+            v-if="selectedDefaultActionHint"
+            type="info"
+            :closable="false"
+            show-icon
+            :title="selectedDefaultActionHint"
+            class="inline-alert"
+          />
+
           <el-form-item label="启用状态">
             <el-switch v-model="policyForm.enabled" />
           </el-form-item>
+
           <el-divider>策略阈值配置</el-divider>
           <div class="threshold-row">
             <el-form-item label="Block 阈值">
               <el-input-number v-model="policyForm.blockThreshold" :min="0" :max="1" :step="0.05" />
+              <div class="field-help">{{ getThresholdHint('blockThreshold') }}</div>
             </el-form-item>
             <el-form-item label="Review 阈值">
               <el-input-number
@@ -120,12 +161,14 @@
                 :max="1"
                 :step="0.05"
               />
+              <div class="field-help">{{ getThresholdHint('reviewThreshold') }}</div>
             </el-form-item>
             <el-form-item label="L3 启用">
               <el-switch v-model="policyForm.llmEnabled" />
             </el-form-item>
             <el-form-item label="L2 阈值">
               <el-input-number v-model="policyForm.l2Threshold" :min="0" :max="1" :step="0.05" />
+              <div class="field-help">{{ getThresholdHint('l2Threshold') }}</div>
             </el-form-item>
             <el-form-item label="Shadow 启用">
               <el-switch v-model="policyForm.shadowEnabled" />
@@ -137,8 +180,10 @@
                 :max="1"
                 :step="0.05"
               />
+              <div class="field-help">{{ getThresholdHint('shadowSampleRatio') }}</div>
             </el-form-item>
           </div>
+
           <el-divider>规则绑定与优先级</el-divider>
           <el-table :data="ruleSelections" style="width: 100%" height="280">
             <el-table-column width="60">
@@ -147,8 +192,16 @@
               </template>
             </el-table-column>
             <el-table-column prop="name" label="规则名称" min-width="160" />
-            <el-table-column prop="ruleType" label="类型" width="120" />
-            <el-table-column prop="category" label="类别" width="140" />
+            <el-table-column label="类型" width="180">
+              <template #default="scope">
+                {{ formatRuleType(scope.row.ruleType) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="类别" width="180">
+              <template #default="scope">
+                {{ formatRuleCategory(scope.row.category) }}
+              </template>
+            </el-table-column>
             <el-table-column label="优先级" width="140">
               <template #default="scope">
                 <el-input-number
@@ -172,35 +225,63 @@
       <el-dialog
         v-model="ruleDialogVisible"
         :title="ruleDialogTitle"
-        width="640px"
+        width="680px"
         :close-on-click-modal="false"
       >
         <el-form :model="ruleForm" label-width="110px" label-position="left">
           <el-form-item label="规则名称">
             <el-input v-model="ruleForm.name" placeholder="请输入规则名称" />
           </el-form-item>
+
           <el-form-item label="规则类型">
-            <el-select v-model="ruleForm.ruleType" placeholder="请选择">
-              <el-option label="REGEX" value="REGEX" />
-              <el-option label="LLM" value="LLM" />
+            <el-select v-model="ruleForm.ruleType" placeholder="请选择" style="width: 100%">
+              <el-option
+                v-for="item in ruleTypeOptions"
+                :key="item.code"
+                :label="formatOptionLabel(item)"
+                :value="item.code"
+              />
             </el-select>
           </el-form-item>
+
           <el-form-item label="规则类别">
-            <el-input v-model="ruleForm.category" placeholder="PII/SPAM/..." />
+            <el-select
+              v-model="ruleForm.category"
+              filterable
+              allow-create
+              clearable
+              default-first-option
+              placeholder="请选择或输入规则类别"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="item in ruleCategoryOptions"
+                :key="item.code"
+                :label="formatOptionLabel(item)"
+                :value="item.code"
+              />
+            </el-select>
           </el-form-item>
+
           <el-form-item label="严重度">
             <el-input-number v-model="ruleForm.severity" :min="0" :max="1" :step="0.05" />
           </el-form-item>
+
           <el-form-item label="启用状态">
             <el-switch v-model="ruleForm.enabled" />
           </el-form-item>
+
           <el-form-item label="配置 JSON">
             <el-input
               v-model="ruleForm.configJson"
               type="textarea"
               :rows="5"
-              placeholder='例如: {"pattern":"\\\\d{11}","flags":"g"}'
+              placeholder='例如: {"pattern":"\\\\d{11}","flags":"CASE_INSENSITIVE"}'
             />
+            <div class="config-toolbar">
+              <el-button size="small" @click="fillRuleConfigTemplate">按类型填充模板</el-button>
+            </div>
+            <div class="field-help">{{ ruleTypeConfigHint }}</div>
           </el-form-item>
         </el-form>
         <template #footer>
@@ -213,10 +294,19 @@
 </template>
 
 <script setup>
-  import { onMounted, reactive, ref } from 'vue';
+  import { computed, onMounted, reactive, ref } from 'vue';
   import { ElMessage, ElMessageBox } from 'element-plus';
   import { Plus, Refresh } from '@element-plus/icons-vue';
+  import cleaningMetaService from '@/services/cleaningMeta';
   import cleaningService from '@/services/cleaning';
+  import {
+    buildOptionLabel,
+    mergeOptionsWithFallback,
+    readCleaningUiMode,
+    UI_MODE_BEGINNER,
+    UI_MODE_EXPERT,
+  } from '@/constants/cleaningLabelMaps';
+  import CleaningModeSwitch from '@/components/cleaning/CleaningModeSwitch.vue';
   import BaseLayout from '@/layouts/BaseLayout.vue';
 
   const activeTab = ref('policies');
@@ -224,6 +314,9 @@
   const rules = ref([]);
   const loadingPolicies = ref(false);
   const loadingRules = ref(false);
+
+  const uiMode = ref(readCleaningUiMode());
+  const optionMeta = ref(mergeOptionsWithFallback(null));
 
   const policyDialogVisible = ref(false);
   const policyDialogTitle = ref('新增策略');
@@ -254,6 +347,72 @@
     configJson: '',
   });
 
+  const isBeginnerMode = computed(() => uiMode.value === UI_MODE_BEGINNER);
+  const defaultActionOptions = computed(() => optionMeta.value.defaultActions || []);
+  const ruleTypeOptions = computed(() => optionMeta.value.ruleTypes || []);
+  const ruleCategoryOptions = computed(() => optionMeta.value.ruleCategories || []);
+  const thresholdGuidance = computed(() => optionMeta.value.thresholdGuidance || []);
+
+  const selectedDefaultActionHint = computed(() => {
+    const matched = defaultActionOptions.value.find(item => item.code === policyForm.defaultAction);
+    if (!matched) {
+      return '';
+    }
+    const effect = matched.effect ? `；作用：${matched.effect}` : '';
+    const risk = matched.riskLevel ? `；风险：${matched.riskLevel}` : '';
+    return `${matched.labelZh || matched.code}：${matched.description || ''}${effect}${risk}`;
+  });
+
+  const ruleTypeConfigHint = computed(() => {
+    const matched = ruleTypeOptions.value.find(item => item.code === ruleForm.ruleType);
+    return matched?.configSchemaHint || '可填写 JSON 对象，为规则提供额外参数';
+  });
+
+  const handleModeChange = mode => {
+    uiMode.value = mode === UI_MODE_EXPERT ? UI_MODE_EXPERT : UI_MODE_BEGINNER;
+  };
+
+  const formatOptionLabel = item => {
+    if (!item) {
+      return '-';
+    }
+    if (isBeginnerMode.value) {
+      return item.labelZh || item.code;
+    }
+    return `${item.labelZh || item.code}（${item.code}）`;
+  };
+
+  const formatDefaultAction = code => buildOptionLabel(code, defaultActionOptions.value);
+
+  const formatRuleType = code => buildOptionLabel(code, ruleTypeOptions.value);
+
+  const formatRuleCategory = code => buildOptionLabel(code, ruleCategoryOptions.value);
+
+  const getThresholdHint = thresholdCode => {
+    const matched = thresholdGuidance.value.find(item => item.code === thresholdCode);
+    if (!matched) {
+      return optionMeta.value.fieldHelp?.['policy.threshold'] || '';
+    }
+    return `${matched.description || ''}（推荐 ${matched.recommendedRange || '-'}）`;
+  };
+
+  const fillRuleConfigTemplate = () => {
+    const templates = optionMeta.value.jsonConfigTemplates || {};
+    const template = templates[ruleForm.ruleType];
+    if (!template || typeof template !== 'object') {
+      ruleForm.configJson = '{}';
+      ElMessage.success('已填充空模板');
+      return;
+    }
+    ruleForm.configJson = JSON.stringify(template, null, 2);
+    ElMessage.success('已按规则类型填充模板');
+  };
+
+  const loadOptionMeta = async () => {
+    const remote = await cleaningMetaService.getOptions();
+    optionMeta.value = mergeOptionsWithFallback(remote);
+  };
+
   const loadPolicies = async () => {
     loadingPolicies.value = true;
     try {
@@ -277,7 +436,7 @@
   };
 
   const loadAll = async () => {
-    await Promise.all([loadPolicies(), loadRules()]);
+    await Promise.all([loadOptionMeta(), loadPolicies(), loadRules()]);
   };
 
   const parseJsonSafe = value => {
@@ -306,6 +465,7 @@
     policyForm.l2Threshold = config.l2Threshold ?? 0.6;
     policyForm.shadowEnabled = config.shadowEnabled ?? false;
     policyForm.shadowSampleRatio = config.shadowSampleRatio ?? 0;
+
     ruleSelections.value = rules.value.map(rule => {
       const binding = policy?.rules?.find(item => item.ruleId === rule.id);
       return {
@@ -317,6 +477,7 @@
         priority: binding?.priority ?? 0,
       };
     });
+
     policyDialogVisible.value = true;
   };
 
@@ -325,6 +486,7 @@
       ElMessage.warning('请输入策略名称');
       return;
     }
+
     try {
       const payload = {
         name: policyForm.name,
@@ -340,6 +502,7 @@
           shadowSampleRatio: policyForm.shadowSampleRatio,
         },
       };
+
       let policyId = policyForm.id;
       if (policyId) {
         await cleaningService.updatePolicy(policyId, payload);
@@ -347,12 +510,14 @@
         const created = await cleaningService.createPolicy(payload);
         policyId = created?.id;
       }
+
       if (policyId) {
         const bindings = ruleSelections.value
           .filter(item => item.selected)
           .map(item => ({ ruleId: item.ruleId, priority: item.priority }));
         await cleaningService.updatePolicyRules(policyId, bindings);
       }
+
       policyDialogVisible.value = false;
       await loadPolicies();
       ElMessage.success('策略已保存');
@@ -394,6 +559,7 @@
       ElMessage.warning('请填写完整规则信息');
       return;
     }
+
     let config = {};
     if (ruleForm.configJson) {
       try {
@@ -403,6 +569,7 @@
         return;
       }
     }
+
     const payload = {
       name: ruleForm.name,
       ruleType: ruleForm.ruleType,
@@ -411,6 +578,7 @@
       enabled: ruleForm.enabled ? 1 : 0,
       config,
     };
+
     try {
       if (ruleForm.id) {
         await cleaningService.updateRule(ruleForm.id, payload);
@@ -454,7 +622,7 @@
   }
 
   .main-content {
-    max-width: 1200px;
+    max-width: 1240px;
     margin: 0 auto;
   }
 
@@ -462,7 +630,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
   }
 
   .content-title {
@@ -479,7 +647,12 @@
 
   .header-actions {
     display: flex;
+    align-items: center;
     gap: 0.75rem;
+  }
+
+  .intro-alert {
+    margin-bottom: 1rem;
   }
 
   .content-tabs {
@@ -490,9 +663,24 @@
 
   .threshold-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 1rem;
     margin-bottom: 1rem;
+  }
+
+  .field-help {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .inline-alert {
+    margin-bottom: 10px;
+  }
+
+  .config-toolbar {
+    margin-top: 8px;
   }
 
   .rule-toolbar {
