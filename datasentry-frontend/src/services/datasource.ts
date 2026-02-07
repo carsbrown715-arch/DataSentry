@@ -88,6 +88,24 @@ class DatasourceService {
     }
   }
 
+  // 3.1 获取数据源指定表的字段列表
+  async getTableColumns(id: number, tableName: string): Promise<string[]> {
+    try {
+      const response = await axios.get<ApiResponse<string[]>>(
+        `${API_BASE_URL}/${id}/tables/${encodeURIComponent(tableName)}/columns`,
+      );
+      return response.data.data || [];
+    } catch (error) {
+      if (
+        axios.isAxiosError(error) &&
+        (error.response?.status === 400 || error.response?.status === 404)
+      ) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
   // 4. 创建数据源
   async createDatasource(datasource: Datasource): Promise<Datasource> {
     const response = await axios.post<Datasource>(API_BASE_URL, datasource);

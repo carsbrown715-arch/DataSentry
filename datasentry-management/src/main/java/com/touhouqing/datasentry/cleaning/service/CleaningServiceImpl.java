@@ -3,15 +3,19 @@ package com.touhouqing.datasentry.cleaning.service;
 import com.touhouqing.datasentry.cleaning.dto.CleaningCheckRequest;
 import com.touhouqing.datasentry.cleaning.dto.CleaningResponse;
 import com.touhouqing.datasentry.cleaning.enums.CleaningBindingType;
+import com.touhouqing.datasentry.cleaning.enums.CleaningCostChannel;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningAllowlistMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningBindingMapper;
+import com.touhouqing.datasentry.cleaning.mapper.CleaningJobMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningAllowlist;
 import com.touhouqing.datasentry.cleaning.model.CleaningBinding;
 import com.touhouqing.datasentry.cleaning.model.CleaningContext;
+import com.touhouqing.datasentry.cleaning.model.CleaningJob;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicySnapshot;
 import com.touhouqing.datasentry.cleaning.model.Finding;
 import com.touhouqing.datasentry.cleaning.pipeline.CleaningPipeline;
 import com.touhouqing.datasentry.exception.InvalidInputException;
+import com.touhouqing.datasentry.properties.DataSentryProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -30,7 +34,19 @@ public class CleaningServiceImpl implements CleaningService {
 
 	private final CleaningAllowlistMapper allowlistMapper;
 
+	private final CleaningJobMapper jobMapper;
+
 	private final CleaningPipeline pipeline;
+
+	private final CleaningTokenEstimator tokenEstimator;
+
+	private final CleaningPricingService pricingService;
+
+	private final CleaningCostLedgerService costLedgerService;
+
+	private final CleaningShadowService shadowService;
+
+	private final DataSentryProperties dataSentryProperties;
 
 	@Override
 	public CleaningResponse check(Long agentId, CleaningCheckRequest request, String traceId) {
@@ -45,6 +61,9 @@ public class CleaningServiceImpl implements CleaningService {
 	private CleaningResponse execute(Long agentId, CleaningCheckRequest request, String traceId,
 			boolean sanitizeRequested) {
 		CleaningPolicySnapshot snapshot = resolvePolicySnapshot(agentId, request);
+		CleaningJob onlineJob = resolveOnlineBudgetJob(agentId);
+		long estimatedTokens = tokenEstimator.estimateTokens(request.getText());
+		boolean failClosed = isFailClosedTriggered(onlineJob, estimatedTokens);
 		List<CleaningAllowlist> allowlists = allowlistMapper.findActive();
 		if (allowlists == null) {
 			allowlists = List.of();
@@ -57,13 +76,44 @@ public class CleaningServiceImpl implements CleaningService {
 			.build();
 		context.getMetadata().put("scene", request.getScene());
 		context.getMetadata().put("allowlists", allowlists);
+		context.getMetadata().put("disableL3", failClosed);
+		context.getMetadata().put("shadowEnabled", dataSentryProperties.getCleaning().getShadow().isEnabled());
 		context.getMetrics().put("startTimeMs", System.currentTimeMillis());
 		CleaningContext result = pipeline.execute(context, sanitizeRequested);
+		shadowService.submitIfEnabled(result, snapshot.getConfig());
+		recordOnlineCost(agentId, traceId, estimatedTokens, failClosed);
 		return CleaningResponse.builder()
 			.verdict(result.getVerdict() != null ? result.getVerdict().name() : null)
 			.categories(resolveCategories(result.getFindings()))
 			.sanitizedText(sanitizeRequested ? result.getSanitizedText() : null)
 			.build();
+	}
+
+	private CleaningJob resolveOnlineBudgetJob(Long agentId) {
+		return jobMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<CleaningJob>()
+			.eq(CleaningJob::getAgentId, agentId)
+			.eq(CleaningJob::getEnabled, 1)
+			.orderByDesc(CleaningJob::getId)
+			.last("LIMIT 1"));
+	}
+
+	private boolean isFailClosedTriggered(CleaningJob onlineJob, long estimatedTokens) {
+		int defaultLimit = dataSentryProperties.getCleaning().getBudget().getOnlineRequestTokenLimit();
+		int tokenLimit = onlineJob != null && onlineJob.getOnlineRequestTokenLimit() != null
+				? onlineJob.getOnlineRequestTokenLimit() : defaultLimit;
+		boolean failClosedEnabled = onlineJob != null && onlineJob.getOnlineFailClosedEnabled() != null
+				? onlineJob.getOnlineFailClosedEnabled() == 1
+				: dataSentryProperties.getCleaning().getBudget().isFailClosedEnabled();
+		return failClosedEnabled && tokenLimit > 0 && estimatedTokens > tokenLimit;
+	}
+
+	private void recordOnlineCost(Long agentId, String traceId, long estimatedTokens, boolean failClosed) {
+		String detectorLevel = failClosed ? "L1" : "L3";
+		CleaningPricingService.Pricing pricing = pricingService.resolvePricing(CleaningPricingService.DEFAULT_PROVIDER,
+				CleaningPricingService.DEFAULT_MODEL);
+		costLedgerService.recordCost(new CleaningCostLedgerService.CostEntry(null, null, agentId, traceId,
+				CleaningCostChannel.ONLINE, detectorLevel, pricing.provider(), pricing.model(), estimatedTokens, 0L,
+				pricing.inputPricePer1k(), pricing.outputPricePer1k(), pricing.currency()));
 	}
 
 	private CleaningPolicySnapshot resolvePolicySnapshot(Long agentId, CleaningCheckRequest request) {

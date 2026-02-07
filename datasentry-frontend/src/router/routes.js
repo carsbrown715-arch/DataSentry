@@ -91,6 +91,34 @@ const routes = [
       module: 'cleaning',
     },
   },
+  {
+    path: '/cleaning/ops',
+    name: 'CleaningOps',
+    component: () => import('@/views/CleaningOpsDashboard.vue'),
+    meta: {
+      title: '清理运维看板',
+      module: 'cleaning',
+    },
+  },
+  {
+    path: '/cleaning/jobs',
+    name: 'CleaningJobs',
+    component: () => import('@/views/CleaningJobManager.vue'),
+    meta: {
+      title: '清理任务管理',
+      module: 'cleaning',
+    },
+  },
+
+  {
+    path: '/cleaning/realtime',
+    name: 'CleaningRealtime',
+    component: () => import('@/views/CleaningRealtime.vue'),
+    meta: {
+      title: '清理实时调试',
+      module: 'cleaning',
+    },
+  },
 
   // 404页面
   {

@@ -48,6 +48,26 @@
               <i class="bi bi-clipboard-check"></i>
               <span>人审工作台</span>
             </div>
+            <div class="nav-item" :class="{ active: isCleaningOpsPage() }" @click="goToCleaningOps">
+              <i class="bi bi-speedometer2"></i>
+              <span>运维看板</span>
+            </div>
+            <div
+              class="nav-item"
+              :class="{ active: isCleaningJobPage() }"
+              @click="goToCleaningJobs"
+            >
+              <i class="bi bi-list-task"></i>
+              <span>任务管理</span>
+            </div>
+            <div
+              class="nav-item"
+              :class="{ active: isCleaningRealtimePage() }"
+              @click="goToCleaningRealtime"
+            >
+              <i class="bi bi-lightning-charge"></i>
+              <span>实时调试</span>
+            </div>
           </nav>
         </div>
       </div>
@@ -85,6 +105,18 @@
         router.push('/cleaning/reviews');
       };
 
+      const goToCleaningOps = () => {
+        router.push('/cleaning/ops');
+      };
+
+      const goToCleaningJobs = () => {
+        router.push('/cleaning/jobs');
+      };
+
+      const goToCleaningRealtime = () => {
+        router.push('/cleaning/realtime');
+      };
+
       const isAgentPage = () => {
         return (
           router.currentRoute.value.name === 'AgentList' ||
@@ -106,15 +138,33 @@
         return router.currentRoute.value.name === 'CleaningReviews';
       };
 
+      const isCleaningOpsPage = () => {
+        return router.currentRoute.value.name === 'CleaningOps';
+      };
+
+      const isCleaningJobPage = () => {
+        return router.currentRoute.value.name === 'CleaningJobs';
+      };
+
+      const isCleaningRealtimePage = () => {
+        return router.currentRoute.value.name === 'CleaningRealtime';
+      };
+
       return {
         goToAgentList,
         goToModelConfig,
         goToCleaningPolicies,
         goToCleaningReviews,
+        goToCleaningOps,
+        goToCleaningJobs,
+        goToCleaningRealtime,
         isAgentPage,
         isModelConfigPage,
         isCleaningPolicyPage,
         isCleaningReviewPage,
+        isCleaningOpsPage,
+        isCleaningJobPage,
+        isCleaningRealtimePage,
       };
     },
   };

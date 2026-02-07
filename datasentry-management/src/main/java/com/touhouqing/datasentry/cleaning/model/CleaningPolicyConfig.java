@@ -19,6 +19,12 @@ public class CleaningPolicyConfig {
 
 	private Boolean llmEnabled;
 
+	private Double l2Threshold;
+
+	private Boolean shadowEnabled;
+
+	private Double shadowSampleRatio;
+
 	public double resolvedBlockThreshold() {
 		return blockThreshold != null ? blockThreshold : 0.7;
 	}
@@ -29,6 +35,25 @@ public class CleaningPolicyConfig {
 
 	public boolean resolvedLlmEnabled() {
 		return llmEnabled == null || llmEnabled;
+	}
+
+	public double resolvedL2Threshold() {
+		return l2Threshold != null ? l2Threshold : 0.6;
+	}
+
+	public boolean resolvedShadowEnabled() {
+		return shadowEnabled != null && shadowEnabled;
+	}
+
+	public double resolvedShadowSampleRatio() {
+		double value = shadowSampleRatio != null ? shadowSampleRatio : 0.0;
+		if (value < 0) {
+			return 0.0;
+		}
+		if (value > 1) {
+			return 1.0;
+		}
+		return value;
 	}
 
 }

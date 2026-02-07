@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -25,6 +26,10 @@ public class CleaningJobCreateRequest {
 
 	@NotBlank
 	private String tableName;
+
+	private String targetConfigType;
+
+	private Map<String, Object> targetConfig;
 
 	@NotEmpty
 	private List<String> pkColumns;
@@ -46,6 +51,18 @@ public class CleaningJobCreateRequest {
 	private Map<String, Object> writebackMapping;
 
 	private Integer batchSize;
+
+	private Integer budgetEnabled;
+
+	private BigDecimal budgetSoftLimit;
+
+	private BigDecimal budgetHardLimit;
+
+	private String budgetCurrency;
+
+	private Integer onlineFailClosedEnabled;
+
+	private Integer onlineRequestTokenLimit;
 
 	private Integer enabled;
 

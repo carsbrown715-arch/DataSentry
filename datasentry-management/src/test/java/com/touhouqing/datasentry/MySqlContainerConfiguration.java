@@ -28,7 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * @since 2025/9/26
  */
 @Configuration
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 public class MySqlContainerConfiguration {
 
 	public static final int MYSQL_PORT = 3306;

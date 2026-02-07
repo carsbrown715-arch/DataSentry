@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningJobRun;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -64,6 +65,37 @@ public interface CleaningJobRunMapper extends BaseMapper<CleaningJobRun> {
 			.set(CleaningJobRun::getTotalFailed, totalFailed)
 			.set(CleaningJobRun::getHeartbeatTime, now)
 			.set(CleaningJobRun::getLeaseUntil, leaseUntil)
+			.set(CleaningJobRun::getUpdatedTime, now);
+		return update(null, wrapper);
+	}
+
+	default int updateProgressWithBudget(Long id, String checkpointJson, Long totalScanned, Long totalFlagged,
+			Long totalWritten, Long totalFailed, BigDecimal actualCost, String budgetStatus, String budgetMessage,
+			LocalDateTime now, LocalDateTime leaseUntil) {
+		LambdaUpdateWrapper<CleaningJobRun> wrapper = new LambdaUpdateWrapper<CleaningJobRun>()
+			.eq(CleaningJobRun::getId, id)
+			.set(CleaningJobRun::getCheckpointJson, checkpointJson)
+			.set(CleaningJobRun::getTotalScanned, totalScanned)
+			.set(CleaningJobRun::getTotalFlagged, totalFlagged)
+			.set(CleaningJobRun::getTotalWritten, totalWritten)
+			.set(CleaningJobRun::getTotalFailed, totalFailed)
+			.set(CleaningJobRun::getActualCost, actualCost)
+			.set(CleaningJobRun::getBudgetStatus, budgetStatus)
+			.set(CleaningJobRun::getBudgetMessage, budgetMessage)
+			.set(CleaningJobRun::getHeartbeatTime, now)
+			.set(CleaningJobRun::getLeaseUntil, leaseUntil)
+			.set(CleaningJobRun::getUpdatedTime, now);
+		return update(null, wrapper);
+	}
+
+	default int updateBudget(Long id, BigDecimal estimatedCost, BigDecimal actualCost, String budgetStatus,
+			String budgetMessage, LocalDateTime now) {
+		LambdaUpdateWrapper<CleaningJobRun> wrapper = new LambdaUpdateWrapper<CleaningJobRun>()
+			.eq(CleaningJobRun::getId, id)
+			.set(CleaningJobRun::getEstimatedCost, estimatedCost)
+			.set(CleaningJobRun::getActualCost, actualCost)
+			.set(CleaningJobRun::getBudgetStatus, budgetStatus)
+			.set(CleaningJobRun::getBudgetMessage, budgetMessage)
 			.set(CleaningJobRun::getUpdatedTime, now);
 		return update(null, wrapper);
 	}

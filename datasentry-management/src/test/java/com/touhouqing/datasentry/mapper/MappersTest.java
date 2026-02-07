@@ -27,6 +27,7 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.context.ImportTestcontainers;
 import org.springframework.test.context.TestPropertySource;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Mappers 单元测试类
@@ -35,6 +36,7 @@ import org.springframework.test.context.TestPropertySource;
  * @since 2025/9/26
  */
 @SpringBootTest
+@Testcontainers(disabledWithoutDocker = true)
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestPropertySource(properties = { "spring.sql.init.mode=never" })
 @ImportTestcontainers(MySqlContainerConfiguration.class)

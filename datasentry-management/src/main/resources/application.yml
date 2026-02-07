@@ -48,6 +48,15 @@ spring:
             custom-domain: ${OSS_CUSTOM_DOMAIN:}
         cleaning:
           enabled: true
+          shadow:
+            enabled: true
+            sample-ratio: 0.1
+          budget:
+            default-currency: CNY
+            default-soft-limit: 10
+            default-hard-limit: 50
+            online-request-token-limit: 4000
+            fail-closed-enabled: true
           batch:
             enabled: true
             poll-interval-ms: 5000
@@ -59,6 +68,41 @@ spring:
             encrypt: true
             master-key-env: DATASENTRY_BACKUP_MASTER_KEY
             provider: LOCAL_AES_GCM
+          l2:
+            provider: DUMMY
+            threshold: 0.6
+            onnx-model-path: ''
+            cloud-api:
+              url: ''
+              api-key: ''
+              auth-header: Authorization
+              auth-prefix: Bearer
+              model: ''
+              timeout-ms: 3000
+              connect-timeout-ms: 1000
+          pricing:
+            sync-enabled: true
+            sync-interval-ms: 1800000
+            source-type: LOCAL_CONFIG
+            local-catalog:
+              - provider: LOCAL_DEFAULT
+                model: L3_LLM
+                version: default
+                input-price-per1k: 0.002000
+                output-price-per1k: 0.004000
+                currency: CNY
+            http:
+              url: ''
+              timeout-ms: 3000
+          notification:
+            dlq-backlog-threshold: 100
+            webhook:
+              enabled: false
+              url: ''
+              secret: ''
+              timeout-ms: 3000
+              retry-times: 1
+              rate-limit-per-minute: 30
         max-sql-retry-count: 10
   servlet:
     multipart:

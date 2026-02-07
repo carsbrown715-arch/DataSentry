@@ -1,0 +1,24 @@
+package com.touhouqing.datasentry.cleaning.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class CleaningAlertView {
+
+	private String level;
+
+	private String code;
+
+	private String message;
+
+	private LocalDateTime createdTime;
+
+}

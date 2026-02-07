@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -25,6 +26,10 @@ public class CleaningJob {
 	private Long datasourceId;
 
 	private String tableName;
+
+	private String targetConfigType;
+
+	private String targetConfigJson;
 
 	private String pkColumnsJson;
 
@@ -49,6 +54,18 @@ public class CleaningJob {
 	private Integer concurrency;
 
 	private Integer rateLimit;
+
+	private Integer budgetEnabled;
+
+	private BigDecimal budgetSoftLimit;
+
+	private BigDecimal budgetHardLimit;
+
+	private String budgetCurrency;
+
+	private Integer onlineFailClosedEnabled;
+
+	private Integer onlineRequestTokenLimit;
 
 	private Integer enabled;
 

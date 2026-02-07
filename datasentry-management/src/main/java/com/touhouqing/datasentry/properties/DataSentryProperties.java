@@ -21,6 +21,10 @@ import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+
 @Getter
 @Setter
 @ConfigurationProperties(prefix = Constant.PROJECT_PROPERTIES_PREFIX)
@@ -107,6 +111,16 @@ public class DataSentryProperties {
 
 		private Backup backup = new Backup();
 
+		private Shadow shadow = new Shadow();
+
+		private Budget budget = new Budget();
+
+		private Pricing pricing = new Pricing();
+
+		private L2 l2 = new L2();
+
+		private Notification notification = new Notification();
+
 		@Getter
 		@Setter
 		public static class Batch {
@@ -161,6 +175,158 @@ public class DataSentryProperties {
 			 * 加密提供方标识
 			 */
 			private String provider = "LOCAL_AES_GCM";
+
+		}
+
+		@Getter
+		@Setter
+		public static class Budget {
+
+			private String defaultCurrency = "CNY";
+
+			private int defaultSoftLimit = 10;
+
+			private int defaultHardLimit = 50;
+
+			private int onlineRequestTokenLimit = 4000;
+
+			private boolean failClosedEnabled = true;
+
+		}
+
+		@Getter
+		@Setter
+		public static class Shadow {
+
+			private boolean enabled = true;
+
+			private double sampleRatio = 0.1;
+
+		}
+
+		@Getter
+		@Setter
+		public static class Pricing {
+
+			private boolean syncEnabled = true;
+
+			private long syncIntervalMs = 1800000;
+
+			private String sourceType = "LOCAL_CONFIG";
+
+			private Http http = new Http();
+
+			private List<PriceItem> localCatalog = defaultCatalog();
+
+			private static List<PriceItem> defaultCatalog() {
+				List<PriceItem> defaults = new ArrayList<>();
+				defaults.add(new PriceItem("LOCAL_DEFAULT", "L3_LLM", "default", new BigDecimal("0.002000"),
+						new BigDecimal("0.004000"), "CNY"));
+				return defaults;
+			}
+
+			@Getter
+			@Setter
+			public static class Http {
+
+				private String url;
+
+				private long timeoutMs = 3000;
+
+			}
+
+			@Getter
+			@Setter
+			public static class PriceItem {
+
+				private String provider;
+
+				private String model;
+
+				private String version = "default";
+
+				private BigDecimal inputPricePer1k = BigDecimal.ZERO;
+
+				private BigDecimal outputPricePer1k = BigDecimal.ZERO;
+
+				private String currency = "CNY";
+
+				public PriceItem() {
+				}
+
+				public PriceItem(String provider, String model, String version, BigDecimal inputPricePer1k,
+						BigDecimal outputPricePer1k, String currency) {
+					this.provider = provider;
+					this.model = model;
+					this.version = version;
+					this.inputPricePer1k = inputPricePer1k;
+					this.outputPricePer1k = outputPricePer1k;
+					this.currency = currency;
+				}
+
+			}
+
+		}
+
+		@Getter
+		@Setter
+		public static class L2 {
+
+			private String provider = "DUMMY";
+
+			private String onnxModelPath;
+
+			private double threshold = 0.6;
+
+			private CloudApi cloudApi = new CloudApi();
+
+			@Getter
+			@Setter
+			public static class CloudApi {
+
+				private String url;
+
+				private String apiKey;
+
+				private String authHeader = "Authorization";
+
+				private String authPrefix = "Bearer";
+
+				private String model;
+
+				private int timeoutMs = 3000;
+
+				private int connectTimeoutMs = 1000;
+
+			}
+
+		}
+
+		@Getter
+		@Setter
+		public static class Notification {
+
+			private long dlqBacklogThreshold = 100;
+
+			private Webhook webhook = new Webhook();
+
+			@Getter
+			@Setter
+			public static class Webhook {
+
+				private boolean enabled = false;
+
+				private String url;
+
+				private String secret;
+
+				private int timeoutMs = 3000;
+
+				private int retryTimes = 1;
+
+				private int rateLimitPerMinute = 30;
+
+			}
 
 		}
 

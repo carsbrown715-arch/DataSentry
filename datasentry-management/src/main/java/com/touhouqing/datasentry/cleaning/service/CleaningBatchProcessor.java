@@ -1,6 +1,8 @@
 package com.touhouqing.datasentry.cleaning.service;
 
 import com.touhouqing.datasentry.cleaning.enums.CleaningJobMode;
+import com.touhouqing.datasentry.cleaning.enums.CleaningBudgetStatus;
+import com.touhouqing.datasentry.cleaning.enums.CleaningCostChannel;
 import com.touhouqing.datasentry.cleaning.enums.CleaningJobRunStatus;
 import com.touhouqing.datasentry.cleaning.enums.CleaningReviewPolicy;
 import com.touhouqing.datasentry.cleaning.enums.CleaningWritebackMode;
@@ -20,6 +22,7 @@ import com.touhouqing.datasentry.cleaning.model.CleaningRecord;
 import com.touhouqing.datasentry.cleaning.model.CleaningReviewTask;
 import com.touhouqing.datasentry.cleaning.model.Finding;
 import com.touhouqing.datasentry.cleaning.pipeline.CleaningPipeline;
+import com.touhouqing.datasentry.cleaning.util.CleaningJsonPathProcessor;
 import com.touhouqing.datasentry.cleaning.util.CleaningWritebackValidator;
 import com.touhouqing.datasentry.connector.pool.DBConnectionPool;
 import com.touhouqing.datasentry.connector.pool.DBConnectionPoolFactory;
@@ -32,6 +35,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -77,6 +81,20 @@ public class CleaningBatchProcessor {
 
 	private final CleaningBackupEncryptionService encryptionService;
 
+	private final CleaningTokenEstimator tokenEstimator;
+
+	private final CleaningPricingService pricingService;
+
+	private final CleaningCostLedgerService costLedgerService;
+
+	private final CleaningBudgetService budgetService;
+
+	private final CleaningDlqService dlqService;
+
+	private final CleaningNotificationService notificationService;
+
+	private final CleaningJsonPathProcessor jsonPathProcessor;
+
 	private final DataSentryProperties dataSentryProperties;
 
 	public void processRun(CleaningJobRun run, String leaseOwner) {
@@ -105,6 +123,7 @@ public class CleaningBatchProcessor {
 		CleaningPolicySnapshot snapshot = resolvePolicySnapshot(run, job);
 		String pkColumn = preflight.pkColumn();
 		List<String> targetColumns = preflight.targetColumns();
+		Map<String, String> jsonPathMappings = preflight.jsonPathMappings();
 		Map<String, String> updateMapping = preflight.updateMapping();
 		Map<String, Object> softDeleteMapping = preflight.softDeleteMapping();
 		List<String> selectColumns = preflight.selectColumns();
@@ -113,6 +132,10 @@ public class CleaningBatchProcessor {
 		Long totalFlagged = defaultLong(run.getTotalFlagged());
 		Long totalWritten = defaultLong(run.getTotalWritten());
 		Long totalFailed = defaultLong(run.getTotalFailed());
+		BigDecimal actualCost = run.getActualCost() != null ? run.getActualCost() : BigDecimal.ZERO;
+		BigDecimal estimatedCost = estimateBatchCost(job, targetColumns);
+		jobRunMapper.updateBudget(run.getId(), estimatedCost, actualCost, CleaningBudgetStatus.NORMAL.name(), null,
+				LocalDateTime.now());
 		String lastPk = resolveLastPk(run.getCheckpointJson());
 
 		Datasource datasource = datasourceService.getDatasourceById(job.getDatasourceId());
@@ -145,7 +168,8 @@ public class CleaningBatchProcessor {
 					String pkJson = toJsonSafe(Map.of(pkColumn, pkValue));
 					RowProcessResult rowResult = processRow(run.getId(), job, snapshot, allowlists, sanitizeRequested,
 							pkJson, pkColumn, pkValue, row, targetColumns, updateMapping, softDeleteMapping, columnMeta,
-							connection);
+							jsonPathMappings, connection);
+					actualCost = actualCost.add(rowResult.costAmount());
 					totalScanned++;
 					if (rowResult.flagged()) {
 						totalFlagged++;
@@ -157,12 +181,28 @@ public class CleaningBatchProcessor {
 						totalFailed++;
 					}
 					lastPk = pkValue;
+					CleaningBudgetStatus budgetStatus = budgetService.evaluate(job, actualCost);
+					if (budgetStatus == CleaningBudgetStatus.HARD_EXCEEDED) {
+						LocalDateTime pauseTime = LocalDateTime.now();
+						String message = "预算达到硬阈值，自动暂停";
+						jobRunMapper.updateProgressWithBudget(run.getId(), buildCheckpoint(lastPk), totalScanned,
+								totalFlagged, totalWritten, totalFailed, actualCost, budgetStatus.name(), message,
+								pauseTime,
+								pauseTime.plusSeconds(dataSentryProperties.getCleaning().getBatch().getLeaseSeconds()));
+						jobRunMapper.updateStatusWithoutEnd(run.getId(), CleaningJobRunStatus.PAUSED.name(), pauseTime);
+						notificationService.notifyAsync("WARN", "BUDGET_HARD_EXCEEDED", message,
+								Map.of("jobId", job.getId(), "jobRunId", run.getId(), "actualCost", actualCost,
+										"budgetHardLimit", job.getBudgetHardLimit()));
+						return;
+					}
 				}
 				LocalDateTime heartbeatTime = LocalDateTime.now();
 				LocalDateTime leaseUntil = heartbeatTime
 					.plusSeconds(dataSentryProperties.getCleaning().getBatch().getLeaseSeconds());
-				jobRunMapper.updateProgress(run.getId(), buildCheckpoint(lastPk), totalScanned, totalFlagged,
-						totalWritten, totalFailed, heartbeatTime, leaseUntil);
+				CleaningBudgetStatus status = budgetService.evaluate(job, actualCost);
+				String budgetMessage = status == CleaningBudgetStatus.SOFT_EXCEEDED ? "预算达到软阈值" : null;
+				jobRunMapper.updateProgressWithBudget(run.getId(), buildCheckpoint(lastPk), totalScanned, totalFlagged,
+						totalWritten, totalFailed, actualCost, status.name(), budgetMessage, heartbeatTime, leaseUntil);
 				jobRunMapper.heartbeat(run.getId(), leaseOwner, leaseUntil, heartbeatTime);
 			}
 		}
@@ -177,8 +217,9 @@ public class CleaningBatchProcessor {
 			List<CleaningAllowlist> allowlists, boolean sanitizeRequested, String pkJson, String pkColumn,
 			String pkValue, Map<String, String> row, List<String> targetColumns, Map<String, String> updateMapping,
 			Map<String, Object> softDeleteMapping, Map<String, CleaningWritebackValidator.ColumnMeta> columnMeta,
-			Connection connection) {
+			Map<String, String> jsonPathMappings, Connection connection) {
 		try {
+			BigDecimal rowCost = BigDecimal.ZERO;
 			boolean writebackEnabled = CleaningJobMode.WRITEBACK.name().equalsIgnoreCase(job.getMode());
 			CleaningWritebackMode writebackMode = parseWritebackMode(job.getWritebackMode());
 			CleaningReviewPolicy reviewPolicy = parseReviewPolicy(job.getReviewPolicy());
@@ -194,6 +235,18 @@ public class CleaningBatchProcessor {
 				if (value == null || value.isBlank()) {
 					continue;
 				}
+				String sourceText = resolveSourceText(column, value, jsonPathMappings);
+				if (sourceText == null || sourceText.isBlank()) {
+					continue;
+				}
+				long estimatedTokens = tokenEstimator.estimateTokens(sourceText);
+				CleaningPricingService.Pricing pricing = pricingService
+					.resolvePricing(CleaningPricingService.DEFAULT_PROVIDER, CleaningPricingService.DEFAULT_MODEL);
+				BigDecimal cost = costLedgerService.recordCost(new CleaningCostLedgerService.CostEntry(job.getId(),
+						runId, job.getAgentId(), String.valueOf(runId), CleaningCostChannel.BATCH, "L3",
+						pricing.provider(), pricing.model(), estimatedTokens, 0L, pricing.inputPricePer1k(),
+						pricing.outputPricePer1k(), pricing.currency()));
+				rowCost = rowCost.add(cost);
 				CleaningContext context = CleaningContext.builder()
 					.agentId(job.getAgentId())
 					.jobRunId(runId)
@@ -202,7 +255,7 @@ public class CleaningBatchProcessor {
 					.pkJson(pkJson)
 					.columnName(column)
 					.traceId(String.valueOf(runId))
-					.originalText(value)
+					.originalText(sourceText)
 					.policySnapshot(snapshot)
 					.build();
 				context.getMetadata().put("allowlists", allowlists);
@@ -217,7 +270,7 @@ public class CleaningBatchProcessor {
 				boolean updateCandidate = writebackEnabled && writebackMode == CleaningWritebackMode.UPDATE
 						&& result.getVerdict() != null && result.getVerdict().name().equals("REDACTED")
 						&& result.getSanitizedText() != null
-						&& !Objects.equals(result.getSanitizedText(), row.get(column));
+						&& isSanitizedChanged(column, value, result.getSanitizedText(), jsonPathMappings);
 				boolean softDeleteCandidate = writebackEnabled && writebackMode == CleaningWritebackMode.SOFT_DELETE
 						&& result.getVerdict() != null && (result.getVerdict().name().equals("BLOCK")
 								|| result.getVerdict().name().equals("REDACTED"));
@@ -255,7 +308,9 @@ public class CleaningBatchProcessor {
 							if (result != null && result.getSanitizedText() != null
 									&& !Objects.equals(result.getSanitizedText(), row.get(column))) {
 								String targetColumn = updateMapping.getOrDefault(column, column);
-								updateValues.put(targetColumn, result.getSanitizedText());
+								Object sanitizedValue = resolveSanitizedWriteValue(column, row.get(column),
+										result.getSanitizedText(), jsonPathMappings);
+								updateValues.put(targetColumn, sanitizedValue);
 								updateAppliedColumns.add(column);
 							}
 						}
@@ -318,12 +373,59 @@ public class CleaningBatchProcessor {
 				recordMapper.insert(record);
 			}
 
-			return new RowProcessResult(flagged, written, failed);
+			return new RowProcessResult(flagged, written, failed, rowCost);
 		}
 		catch (Exception e) {
 			log.warn("Failed to process row for job {} pk {}", job.getId(), pkValue, e);
-			return new RowProcessResult(false, false, true);
+			dlqService.push(job.getId(), runId, job.getDatasourceId(), job.getTableName(), pkJson,
+					Map.of("pkColumn", pkColumn, "pkValue", pkValue, "targetColumns", targetColumns), e);
+			return new RowProcessResult(false, false, true, BigDecimal.ZERO);
 		}
+	}
+
+	private String resolveSourceText(String column, String rawValue, Map<String, String> jsonPathMappings) {
+		String jsonPath = jsonPathMappings.get(column);
+		if (jsonPath == null || jsonPath.isBlank()) {
+			return rawValue;
+		}
+		String extracted = jsonPathProcessor.extractText(rawValue, jsonPath);
+		return extracted != null ? extracted : rawValue;
+	}
+
+	private boolean isSanitizedChanged(String column, String rawValue, String sanitizedText,
+			Map<String, String> jsonPathMappings) {
+		String jsonPath = jsonPathMappings.get(column);
+		if (jsonPath == null || jsonPath.isBlank()) {
+			return !Objects.equals(sanitizedText, rawValue);
+		}
+		String extracted = jsonPathProcessor.extractText(rawValue, jsonPath);
+		if (extracted == null) {
+			return !Objects.equals(sanitizedText, rawValue);
+		}
+		return !Objects.equals(sanitizedText, extracted);
+	}
+
+	private Object resolveSanitizedWriteValue(String column, String rawValue, String sanitizedText,
+			Map<String, String> jsonPathMappings) {
+		String jsonPath = jsonPathMappings.get(column);
+		if (jsonPath == null || jsonPath.isBlank()) {
+			return sanitizedText;
+		}
+		String replaced = jsonPathProcessor.replaceText(rawValue, jsonPath, sanitizedText);
+		if (replaced == null) {
+			return rawValue;
+		}
+		return replaced;
+	}
+
+	private BigDecimal estimateBatchCost(CleaningJob job, List<String> targetColumns) {
+		Integer batchSize = resolveBatchSize(job);
+		long roughTokens = (long) batchSize * Math.max(1, targetColumns.size()) * 100L;
+		CleaningPricingService.Pricing pricing = pricingService.resolvePricing(CleaningPricingService.DEFAULT_PROVIDER,
+				CleaningPricingService.DEFAULT_MODEL);
+		return pricing.inputPricePer1k()
+			.multiply(BigDecimal.valueOf(roughTokens))
+			.divide(BigDecimal.valueOf(1000L), 4, java.math.RoundingMode.HALF_UP);
 	}
 
 	private void backupAndWrite(Long runId, CleaningJob job, String pkJson, String pkColumn, String pkValue,
@@ -438,6 +540,7 @@ public class CleaningBatchProcessor {
 			return Preflight.fail("where_sql is disabled");
 		}
 		Map<String, String> updateMapping = parseUpdateMapping(job.getWritebackMappingJson(), targetColumns);
+		Map<String, String> jsonPathMappings = parseJsonPathMappings(job);
 		Map<String, Object> softDeleteMapping = parseSoftDeleteMapping(job.getWritebackMappingJson());
 		if (writebackEnabled && writebackMode == CleaningWritebackMode.SOFT_DELETE && softDeleteMapping.isEmpty()) {
 			return Preflight.fail("Soft delete mapping is required");
@@ -472,8 +575,24 @@ public class CleaningBatchProcessor {
 		}
 		boolean sanitizeRequested = writebackMode == CleaningWritebackMode.UPDATE
 				|| writebackMode == CleaningWritebackMode.SOFT_DELETE;
-		return Preflight.ok(pkColumn, targetColumns, updateMapping, softDeleteMapping, new ArrayList<>(selectColumns),
-				sanitizeRequested);
+		return Preflight.ok(pkColumn, targetColumns, updateMapping, softDeleteMapping, jsonPathMappings,
+				new ArrayList<>(selectColumns), sanitizeRequested);
+	}
+
+	private Map<String, String> parseJsonPathMappings(CleaningJob job) {
+		if (job == null || job.getTargetConfigType() == null
+				|| !"JSONPATH".equalsIgnoreCase(job.getTargetConfigType())) {
+			return Map.of();
+		}
+		if (job.getTargetConfigJson() == null || job.getTargetConfigJson().isBlank()) {
+			return Map.of();
+		}
+		try {
+			return JsonUtil.getObjectMapper().readValue(job.getTargetConfigJson(), Map.class);
+		}
+		catch (Exception e) {
+			return Map.of();
+		}
 	}
 
 	private String resolveLimitClause(DatabaseDialectEnum dialect) {
@@ -737,21 +856,22 @@ public class CleaningBatchProcessor {
 	}
 
 	private record Preflight(boolean ok, String message, String pkColumn, List<String> targetColumns,
-			Map<String, String> updateMapping, Map<String, Object> softDeleteMapping, List<String> selectColumns,
-			boolean sanitizeRequested) {
+			Map<String, String> updateMapping, Map<String, Object> softDeleteMapping,
+			Map<String, String> jsonPathMappings, List<String> selectColumns, boolean sanitizeRequested) {
 
 		static Preflight fail(String message) {
-			return new Preflight(false, message, null, List.of(), Map.of(), Map.of(), List.of(), false);
+			return new Preflight(false, message, null, List.of(), Map.of(), Map.of(), Map.of(), List.of(), false);
 		}
 
 		static Preflight ok(String pkColumn, List<String> targetColumns, Map<String, String> updateMapping,
-				Map<String, Object> softDeleteMapping, List<String> selectColumns, boolean sanitizeRequested) {
-			return new Preflight(true, null, pkColumn, targetColumns, updateMapping, softDeleteMapping, selectColumns,
-					sanitizeRequested);
+				Map<String, Object> softDeleteMapping, Map<String, String> jsonPathMappings, List<String> selectColumns,
+				boolean sanitizeRequested) {
+			return new Preflight(true, null, pkColumn, targetColumns, updateMapping, softDeleteMapping,
+					jsonPathMappings, selectColumns, sanitizeRequested);
 		}
 	}
 
-	private record RowProcessResult(boolean flagged, boolean written, boolean failed) {
+	private record RowProcessResult(boolean flagged, boolean written, boolean failed, BigDecimal costAmount) {
 	}
 
 }

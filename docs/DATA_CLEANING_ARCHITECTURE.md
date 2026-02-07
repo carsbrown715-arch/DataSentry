@@ -148,6 +148,7 @@ flowchart LR
 
 #### 4.1.1 影子模式（Shadow Mode）
 - API 主线程直接放行，异步复制流量进入 Pipeline。
+- Shadow 执行使用独立线程池（`DiscardPolicy`），队列满时直接丢弃，避免拖垮主业务。
 - 用于验证新策略误杀率与性能，不影响线上用户。
 
 ### 4.2 批处理（数据库）
@@ -174,6 +175,7 @@ flowchart LR
 #### 5.2.1 JSON/结构化字段支持（P2）
 目标列支持 JSONPath 描述（P2 计划项）：
 - 例：`{"col": "extra_info", "json_path": "$.contact.phone"}`
+- **兼容策略**：通过 `target_config_type` 区分 `COLUMNS`（旧）与 `JSONPATH`（新），避免历史任务批量迁移。
 - **局部脱敏**：仅替换 JSON 内特定 value，保持结构完整。
 
 ### 5.3 Policy
@@ -207,6 +209,7 @@ flowchart LR
 通知配置：
 - 通道：Webhook / Email / Slack / 钉钉 / 飞书
 - 触发条件：任务完成/失败、高危检测、写回失败
+- 当前 P2 实现：已落地 Webhook 推送通道（异步线程池 + 限流 + 重试），其他通道按同一事件模型扩展
 
 ### 5.7 Playground / Simulation
 用于安全调试：

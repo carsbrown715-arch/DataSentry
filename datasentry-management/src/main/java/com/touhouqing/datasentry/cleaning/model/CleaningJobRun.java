@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -43,6 +44,14 @@ public class CleaningJobRun {
 	private Long totalWritten;
 
 	private Long totalFailed;
+
+	private BigDecimal estimatedCost;
+
+	private BigDecimal actualCost;
+
+	private String budgetStatus;
+
+	private String budgetMessage;
 
 	private LocalDateTime startedTime;
 

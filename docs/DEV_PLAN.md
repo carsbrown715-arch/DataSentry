@@ -40,14 +40,16 @@
 [x] **人审工作台 UI**：审核任务列表、详情比对、通过/拒绝与回滚入口。  
 
 ### P2 (Enterprise & Cost)
-[ ] **预算控制体系**：事前预估 / 事中监控 / 事后审计；可配置软硬限制。  
-[ ] **超限默认策略**：Batch=PAUSE；Online=SMART FAIL-CLOSED（停止 L3，L1/L2 兜底，SUSPICIOUS 拦截）。  
-[ ] **计价来源与同步**：采用 “DB + 本地缓存 + 在线同步” 轻量方案。  
-[ ] **L2 模型集成**：P1 先实现 Dummy L2（透传），并创建 Spike 任务调研 DJL + ONNX Runtime。  
-[ ] **Shadow Mode & DLQ**：影子流量验证与毒药数据隔离。  
-[ ] **结构化字段**：支持 JSONPath 解析与局部脱敏（不破坏 JSON 结构）。  
-[ ] **通知与观测**：告警通道、指标面板、成本与性能可视化。  
-[ ] **测试与验证**：单测、集成测试、回滚测试、预算熔断测试；CI 通过后进行性能与延迟基准测试。
+[x] **预算控制体系**：事前预估 / 事中监控 / 事后审计；可配置软硬限制。  
+[x] **超限默认策略**：Batch=PAUSE；Online=SMART FAIL-CLOSED（停止 L3，L1/L2 兜底，SUSPICIOUS 拦截）。  
+[x] **计价来源与同步**：采用 “DB + 本地缓存 + 在线同步” 轻量方案。（已落地启动初始化、手动同步 API 与定时同步任务）  
+[x] **L2 模型集成**：P1 先实现 Dummy L2（透传），并创建 Spike 任务调研 DJL + ONNX Runtime。（已升级为 JVM -> JNI -> ONNX Runtime 真推理链路，并补齐 CLOUD_API Provider；CloudApiL2DetectionProvider 使用单例 HttpClient Bean 实现连接复用）  
+[x] **Shadow Mode & DLQ**：影子流量验证与毒药数据隔离。（Shadow 使用独立线程池 + DiscardPolicy，避免阻塞主流程）  
+[x] **结构化字段**：支持 JSONPath 解析与局部脱敏（不破坏 JSON 结构，新增 `target_config_type` 兼容旧配置）。  
+[x] **通知与观测**：告警通道、指标面板、成本与性能可视化。（已落地 Webhook 推送 + 看板扩展）  
+[x] **P2 API 契约文档**：新增 `docs/CLEANING_API_P2.md`，统一在线/批处理/预算/DLQ/回滚 API 验收口径。  
+[x] **测试与验证**：单测、集成测试、回滚测试、预算熔断测试；CI 通过后进行性能与延迟基准测试。（已补齐 P2 新增能力测试与基准报告）
+[x] **P2++ AI 工程化补强**：已补齐 ONNX/CLOUD 模型契约文档（`docs/CLEANING_MODEL_CONTRACT.md`）、ONNX=ON 压测方案（`docs/CLEANING_ONNX_BENCHMARK.md`）与 ONNX/CLOUD 专项运维指标（加载/推理/降级）。
 
 ## Defaults / Decisions
 - **Batch 默认预算**：Soft Limit 10 RMB，Hard Limit 50 RMB。  

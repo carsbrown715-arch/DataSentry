@@ -352,6 +352,8 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_job (
   agent_id BIGINT NOT NULL COMMENT '智能体ID',
   datasource_id BIGINT NOT NULL COMMENT '数据源ID',
   table_name VARCHAR(255) NOT NULL COMMENT '目标表',
+  target_config_type VARCHAR(32) DEFAULT 'COLUMNS' COMMENT '目标配置类型：COLUMNS/JSONPATH',
+  target_config_json TEXT COMMENT '目标配置JSON',
   pk_columns_json TEXT NOT NULL COMMENT '主键列JSON',
   target_columns_json TEXT NOT NULL COMMENT '目标列JSON',
   where_sql TEXT COMMENT '过滤条件',
@@ -364,6 +366,12 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_job (
   batch_size INT DEFAULT 200 COMMENT '批量大小',
   concurrency INT DEFAULT 1 COMMENT '并发数',
   rate_limit INT DEFAULT NULL COMMENT '限速',
+  budget_enabled TINYINT DEFAULT 1 COMMENT '是否启用预算控制',
+  budget_soft_limit DECIMAL(12,4) DEFAULT 10.0000 COMMENT '预算软阈值',
+  budget_hard_limit DECIMAL(12,4) DEFAULT 50.0000 COMMENT '预算硬阈值',
+  budget_currency VARCHAR(16) DEFAULT 'CNY' COMMENT '预算货币单位',
+  online_fail_closed_enabled TINYINT DEFAULT 1 COMMENT '在线超限是否启用 fail-closed',
+  online_request_token_limit INT DEFAULT 4000 COMMENT '在线单次请求 token 上限',
   enabled TINYINT DEFAULT 1 COMMENT '是否启用',
   created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -389,6 +397,10 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_job_run (
   total_flagged BIGINT DEFAULT 0 COMMENT '命中总数',
   total_written BIGINT DEFAULT 0 COMMENT '写回总数',
   total_failed BIGINT DEFAULT 0 COMMENT '失败总数',
+  estimated_cost DECIMAL(12,4) DEFAULT 0 COMMENT '预估成本',
+  actual_cost DECIMAL(12,4) DEFAULT 0 COMMENT '实际成本',
+  budget_status VARCHAR(32) DEFAULT 'NORMAL' COMMENT '预算状态',
+  budget_message VARCHAR(512) DEFAULT NULL COMMENT '预算状态说明',
   started_time TIMESTAMP NULL DEFAULT NULL COMMENT '开始时间',
   ended_time TIMESTAMP NULL DEFAULT NULL COMMENT '结束时间',
   created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -398,6 +410,66 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_job_run (
   INDEX idx_status (status),
   INDEX idx_lease_until (lease_until)
 ) ENGINE=InnoDB COMMENT='清理任务运行实例';
+
+-- 清理价格目录
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_price_catalog (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  provider VARCHAR(100) NOT NULL COMMENT '提供方',
+  model VARCHAR(100) NOT NULL COMMENT '模型标识',
+  version VARCHAR(50) NOT NULL DEFAULT 'default' COMMENT '价格版本',
+  input_price_per_1k DECIMAL(12,6) NOT NULL COMMENT '输入 token 每千计价',
+  output_price_per_1k DECIMAL(12,6) NOT NULL COMMENT '输出 token 每千计价',
+  currency VARCHAR(16) NOT NULL DEFAULT 'CNY' COMMENT '货币单位',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_provider_model_version (provider, model, version),
+  INDEX idx_provider_model (provider, model)
+) ENGINE=InnoDB COMMENT='清理价格目录';
+
+-- 清理成本台账
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_cost_ledger (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  job_id BIGINT DEFAULT NULL COMMENT '任务ID',
+  job_run_id BIGINT DEFAULT NULL COMMENT '任务运行ID',
+  agent_id BIGINT DEFAULT NULL COMMENT '智能体ID',
+  trace_id VARCHAR(64) DEFAULT NULL COMMENT '追踪ID',
+  channel VARCHAR(32) NOT NULL COMMENT '调用链路：ONLINE/BATCH',
+  detector_level VARCHAR(32) DEFAULT NULL COMMENT '检测层级：L1/L2/L3',
+  provider VARCHAR(100) NOT NULL COMMENT '提供方',
+  model VARCHAR(100) NOT NULL COMMENT '模型标识',
+  input_tokens_est BIGINT DEFAULT 0 COMMENT '输入 token 估算值',
+  output_tokens_est BIGINT DEFAULT 0 COMMENT '输出 token 估算值',
+  unit_price_in DECIMAL(12,6) NOT NULL COMMENT '输入单价',
+  unit_price_out DECIMAL(12,6) NOT NULL COMMENT '输出单价',
+  cost_amount DECIMAL(12,6) NOT NULL COMMENT '成本金额',
+  currency VARCHAR(16) NOT NULL DEFAULT 'CNY' COMMENT '货币单位',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  INDEX idx_job_run_id (job_run_id),
+  INDEX idx_trace_id (trace_id),
+  INDEX idx_created_time (created_time)
+) ENGINE=InnoDB COMMENT='清理成本台账';
+
+-- 清理死信队列表
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_dlq (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  job_id BIGINT DEFAULT NULL COMMENT '任务ID',
+  job_run_id BIGINT DEFAULT NULL COMMENT '任务运行ID',
+  datasource_id BIGINT DEFAULT NULL COMMENT '数据源ID',
+  table_name VARCHAR(255) DEFAULT NULL COMMENT '目标表',
+  pk_json TEXT COMMENT '主键JSON',
+  payload_json TEXT COMMENT '失败负载',
+  error_message TEXT COMMENT '失败原因',
+  retry_count INT DEFAULT 0 COMMENT '重试次数',
+  next_retry_time TIMESTAMP NULL DEFAULT NULL COMMENT '下次重试时间',
+  status VARCHAR(32) DEFAULT 'READY' COMMENT '状态：READY/DONE/DEAD',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  INDEX idx_job_run_id (job_run_id),
+  INDEX idx_status_next_retry (status, next_retry_time)
+) ENGINE=InnoDB COMMENT='清理死信队列表';
 
 -- 清理备份记录
 CREATE TABLE IF NOT EXISTS datasentry_cleaning_backup_record (

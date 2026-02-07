@@ -1,6 +1,8 @@
 package com.touhouqing.datasentry.cleaning.controller;
 
 import com.touhouqing.datasentry.cleaning.dto.CleaningJobCreateRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningBudgetView;
+import com.touhouqing.datasentry.cleaning.model.CleaningCostLedger;
 import com.touhouqing.datasentry.cleaning.model.CleaningJob;
 import com.touhouqing.datasentry.cleaning.model.CleaningJobRun;
 import com.touhouqing.datasentry.cleaning.service.CleaningJobService;
@@ -9,6 +11,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -29,6 +33,12 @@ public class CleaningJobController {
 		return ResponseEntity.ok(ApiResponse.success("success", job));
 	}
 
+	@GetMapping("/jobs")
+	public ResponseEntity<ApiResponse<List<CleaningJob>>> listJobs(@RequestParam(required = false) Long agentId,
+			@RequestParam(required = false) Long datasourceId, @RequestParam(required = false) Integer enabled) {
+		return ResponseEntity.ok(ApiResponse.success("success", jobService.listJobs(agentId, datasourceId, enabled)));
+	}
+
 	@PostMapping("/jobs/{jobId}/runs")
 	public ResponseEntity<ApiResponse<CleaningJobRun>> createRun(@PathVariable Long jobId) {
 		CleaningJobRun run = jobService.createRun(jobId);
@@ -39,6 +49,12 @@ public class CleaningJobController {
 	public ResponseEntity<ApiResponse<CleaningJobRun>> getRun(@PathVariable Long runId) {
 		CleaningJobRun run = jobService.getRun(runId);
 		return ResponseEntity.ok(ApiResponse.success("success", run));
+	}
+
+	@GetMapping("/job-runs")
+	public ResponseEntity<ApiResponse<List<CleaningJobRun>>> listRuns(@RequestParam(required = false) Long jobId,
+			@RequestParam(required = false) String status) {
+		return ResponseEntity.ok(ApiResponse.success("success", jobService.listRuns(jobId, status)));
 	}
 
 	@PostMapping("/job-runs/{runId}/pause")
@@ -57,6 +73,18 @@ public class CleaningJobController {
 	public ResponseEntity<ApiResponse<CleaningJobRun>> cancelRun(@PathVariable Long runId) {
 		CleaningJobRun run = jobService.cancelRun(runId);
 		return ResponseEntity.ok(ApiResponse.success("success", run));
+	}
+
+	@GetMapping("/job-runs/{runId}/budget")
+	public ResponseEntity<ApiResponse<CleaningBudgetView>> budget(@PathVariable Long runId) {
+		return ResponseEntity.ok(ApiResponse.success("success", jobService.getBudget(runId)));
+	}
+
+	@GetMapping("/cost-ledger")
+	public ResponseEntity<ApiResponse<List<CleaningCostLedger>>> costLedger(
+			@RequestParam(required = false) Long jobRunId, @RequestParam(required = false) String traceId,
+			@RequestParam(required = false) String channel) {
+		return ResponseEntity.ok(ApiResponse.success("success", jobService.listCostLedger(jobRunId, traceId, channel)));
 	}
 
 }

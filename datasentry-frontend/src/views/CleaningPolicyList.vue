@@ -124,6 +124,20 @@
             <el-form-item label="L3 启用">
               <el-switch v-model="policyForm.llmEnabled" />
             </el-form-item>
+            <el-form-item label="L2 阈值">
+              <el-input-number v-model="policyForm.l2Threshold" :min="0" :max="1" :step="0.05" />
+            </el-form-item>
+            <el-form-item label="Shadow 启用">
+              <el-switch v-model="policyForm.shadowEnabled" />
+            </el-form-item>
+            <el-form-item label="Shadow 采样">
+              <el-input-number
+                v-model="policyForm.shadowSampleRatio"
+                :min="0"
+                :max="1"
+                :step="0.05"
+              />
+            </el-form-item>
           </div>
           <el-divider>规则绑定与优先级</el-divider>
           <el-table :data="ruleSelections" style="width: 100%" height="280">
@@ -222,6 +236,9 @@
     blockThreshold: 0.7,
     reviewThreshold: 0.4,
     llmEnabled: true,
+    l2Threshold: 0.6,
+    shadowEnabled: false,
+    shadowSampleRatio: 0,
   });
   const ruleSelections = ref([]);
 
@@ -286,6 +303,9 @@
     policyForm.blockThreshold = config.blockThreshold ?? 0.7;
     policyForm.reviewThreshold = config.reviewThreshold ?? 0.4;
     policyForm.llmEnabled = config.llmEnabled ?? true;
+    policyForm.l2Threshold = config.l2Threshold ?? 0.6;
+    policyForm.shadowEnabled = config.shadowEnabled ?? false;
+    policyForm.shadowSampleRatio = config.shadowSampleRatio ?? 0;
     ruleSelections.value = rules.value.map(rule => {
       const binding = policy?.rules?.find(item => item.ruleId === rule.id);
       return {
@@ -315,6 +335,9 @@
           blockThreshold: policyForm.blockThreshold,
           reviewThreshold: policyForm.reviewThreshold,
           llmEnabled: policyForm.llmEnabled,
+          l2Threshold: policyForm.l2Threshold,
+          shadowEnabled: policyForm.shadowEnabled,
+          shadowSampleRatio: policyForm.shadowSampleRatio,
         },
       };
       let policyId = policyForm.id;

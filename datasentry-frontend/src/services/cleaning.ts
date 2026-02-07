@@ -92,9 +92,380 @@ export interface CleaningReviewBatchResult {
   stale: number;
 }
 
+export interface CleaningJobCreateRequest {
+  agentId: number;
+  datasourceId: number;
+  tableName: string;
+  targetConfigType?: 'COLUMNS' | 'JSONPATH';
+  targetConfig?: Record<string, unknown>;
+  pkColumns: string[];
+  targetColumns: string[];
+  whereSql?: string;
+  policyId: number;
+  mode?: string;
+  writebackMode?: string;
+  reviewPolicy?: string;
+  writebackMapping?: Record<string, unknown>;
+  batchSize?: number;
+  budgetEnabled?: number;
+  budgetSoftLimit?: number;
+  budgetHardLimit?: number;
+  budgetCurrency?: string;
+  onlineFailClosedEnabled?: number;
+  onlineRequestTokenLimit?: number;
+  enabled?: number;
+}
+
+export interface CleaningJob {
+  id: number;
+  agentId: number;
+  datasourceId: number;
+  tableName: string;
+  targetConfigType?: string;
+  targetConfigJson?: string;
+  pkColumnsJson: string;
+  targetColumnsJson: string;
+  whereSql?: string;
+  policyId: number;
+  mode?: string;
+  writebackMode?: string;
+  reviewPolicy?: string;
+  writebackMappingJson?: string;
+  batchSize?: number;
+  budgetEnabled?: number;
+  budgetSoftLimit?: number;
+  budgetHardLimit?: number;
+  budgetCurrency?: string;
+  onlineFailClosedEnabled?: number;
+  onlineRequestTokenLimit?: number;
+  enabled?: number;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
+export interface CleaningJobRun {
+  id: number;
+  jobId: number;
+  status: string;
+  checkpointJson?: string;
+  policySnapshotJson?: string;
+  totalScanned?: number;
+  totalFlagged?: number;
+  totalWritten?: number;
+  totalFailed?: number;
+  estimatedCost?: number;
+  actualCost?: number;
+  budgetStatus?: string;
+  budgetMessage?: string;
+  startedTime?: string;
+  endedTime?: string;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
+export interface CleaningBudgetView {
+  runId: number;
+  jobId: number;
+  budgetEnabled?: number;
+  budgetSoftLimit?: number;
+  budgetHardLimit?: number;
+  budgetCurrency?: string;
+  estimatedCost?: number;
+  actualCost?: number;
+  budgetStatus?: string;
+  budgetMessage?: string;
+}
+
+export interface CleaningCostLedger {
+  id: number;
+  jobId?: number;
+  jobRunId?: number;
+  agentId?: number;
+  traceId?: string;
+  channel: string;
+  detectorLevel?: string;
+  provider: string;
+  model: string;
+  inputTokensEst?: number;
+  outputTokensEst?: number;
+  unitPriceIn?: number;
+  unitPriceOut?: number;
+  costAmount?: number;
+  currency?: string;
+  createdTime?: string;
+}
+
+export interface CleaningDlqRecord {
+  id: number;
+  jobId?: number;
+  jobRunId?: number;
+  datasourceId?: number;
+  tableName?: string;
+  pkJson?: string;
+  payloadJson?: string;
+  errorMessage?: string;
+  retryCount?: number;
+  nextRetryTime?: string;
+  status?: string;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
+export interface CleaningPricingSyncResult {
+  success: boolean;
+  sourceType?: string;
+  reason?: string;
+  total?: number;
+  inserted?: number;
+  updated?: number;
+  skipped?: number;
+  message?: string;
+  startedTime?: string;
+  finishedTime?: string;
+}
+
+export interface CleaningPriceCatalog {
+  id: number;
+  provider: string;
+  model: string;
+  version?: string;
+  inputPricePer1k?: number;
+  outputPricePer1k?: number;
+  currency?: string;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
+export interface CleaningMetricsView {
+  totalRuns?: number;
+  runningRuns?: number;
+  pausedRuns?: number;
+  hardExceededRuns?: number;
+  totalDlq?: number;
+  readyDlq?: number;
+  totalCost?: number;
+  onlineCost?: number;
+  batchCost?: number;
+  lastPricingSyncTime?: string;
+  pricingSyncFailureCount?: number;
+  webhookPushSuccessCount?: number;
+  webhookPushFailureCount?: number;
+  l2ProviderStatus?: string;
+  onnxModelLoadSuccessCount?: number;
+  onnxModelLoadFailureCount?: number;
+  onnxInferenceSuccessCount?: number;
+  onnxInferenceFailureCount?: number;
+  onnxFallbackCount?: number;
+  onnxInferenceAvgLatencyMs?: number;
+  onnxInferenceP95LatencyMs?: number;
+  onnxRuntimeVersion?: string;
+  onnxModelSignature?: string;
+  cloudInferenceSuccessCount?: number;
+  cloudInferenceFailureCount?: number;
+  cloudFallbackCount?: number;
+  cloudInferenceAvgLatencyMs?: number;
+  cloudInferenceP95LatencyMs?: number;
+}
+
+export interface CleaningAlertView {
+  level: string;
+  code: string;
+  message: string;
+  createdTime?: string;
+}
+
+export interface CleaningCheckRequest {
+  text: string;
+  scene?: string;
+  policyId?: number;
+}
+
+export interface CleaningResponse {
+  verdict?: string;
+  categories?: string[];
+  sanitizedText?: string;
+}
+
+export interface CleaningRollbackRun {
+  id: number;
+  jobRunId?: number;
+  status?: string;
+  checkpointId?: number;
+  totalTarget?: number;
+  totalSuccess?: number;
+  totalFailed?: number;
+  startedTime?: string;
+  endedTime?: string;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
 const API_BASE_URL = '/api/datasentry/cleaning';
 
 class CleaningService {
+  async createJob(payload: CleaningJobCreateRequest): Promise<CleaningJob | null> {
+    const response = await axios.post<ApiResponse<CleaningJob>>(`${API_BASE_URL}/jobs`, payload);
+    return response.data.data || null;
+  }
+
+  async getJob(jobId: number): Promise<CleaningJob | null> {
+    const response = await axios.get<ApiResponse<CleaningJob>>(`${API_BASE_URL}/jobs/${jobId}`);
+    return response.data.data || null;
+  }
+
+  async listJobs(params?: {
+    agentId?: number;
+    datasourceId?: number;
+    enabled?: number;
+  }): Promise<CleaningJob[]> {
+    const response = await axios.get<ApiResponse<CleaningJob[]>>(`${API_BASE_URL}/jobs`, {
+      params,
+    });
+    return response.data.data || [];
+  }
+
+  async createRun(jobId: number): Promise<CleaningJobRun | null> {
+    const response = await axios.post<ApiResponse<CleaningJobRun>>(
+      `${API_BASE_URL}/jobs/${jobId}/runs`,
+    );
+    return response.data.data || null;
+  }
+
+  async getRun(runId: number): Promise<CleaningJobRun | null> {
+    const response = await axios.get<ApiResponse<CleaningJobRun>>(
+      `${API_BASE_URL}/job-runs/${runId}`,
+    );
+    return response.data.data || null;
+  }
+
+  async listRuns(params?: { jobId?: number; status?: string }): Promise<CleaningJobRun[]> {
+    const response = await axios.get<ApiResponse<CleaningJobRun[]>>(`${API_BASE_URL}/job-runs`, {
+      params,
+    });
+    return response.data.data || [];
+  }
+
+  async pauseRun(runId: number): Promise<CleaningJobRun | null> {
+    const response = await axios.post<ApiResponse<CleaningJobRun>>(
+      `${API_BASE_URL}/job-runs/${runId}/pause`,
+    );
+    return response.data.data || null;
+  }
+
+  async resumeRun(runId: number): Promise<CleaningJobRun | null> {
+    const response = await axios.post<ApiResponse<CleaningJobRun>>(
+      `${API_BASE_URL}/job-runs/${runId}/resume`,
+    );
+    return response.data.data || null;
+  }
+
+  async cancelRun(runId: number): Promise<CleaningJobRun | null> {
+    const response = await axios.post<ApiResponse<CleaningJobRun>>(
+      `${API_BASE_URL}/job-runs/${runId}/cancel`,
+    );
+    return response.data.data || null;
+  }
+
+  async getBudget(runId: number): Promise<CleaningBudgetView | null> {
+    const response = await axios.get<ApiResponse<CleaningBudgetView>>(
+      `${API_BASE_URL}/job-runs/${runId}/budget`,
+    );
+    return response.data.data || null;
+  }
+
+  async listCostLedger(params?: {
+    jobRunId?: number;
+    traceId?: string;
+    channel?: string;
+  }): Promise<CleaningCostLedger[]> {
+    const response = await axios.get<ApiResponse<CleaningCostLedger[]>>(
+      `${API_BASE_URL}/cost-ledger`,
+      {
+        params,
+      },
+    );
+    return response.data.data || [];
+  }
+
+  async listDlq(params?: { status?: string; jobRunId?: number }): Promise<CleaningDlqRecord[]> {
+    const response = await axios.get<ApiResponse<CleaningDlqRecord[]>>(`${API_BASE_URL}/dlq`, {
+      params,
+    });
+    return response.data.data || [];
+  }
+
+  async retryDlq(id: number): Promise<void> {
+    await axios.post<ApiResponse<void>>(`${API_BASE_URL}/dlq/${id}/retry`);
+  }
+
+  async getMetricsSummary(): Promise<CleaningMetricsView | null> {
+    const response = await axios.get<ApiResponse<CleaningMetricsView>>(
+      `${API_BASE_URL}/metrics/summary`,
+    );
+    return response.data.data || null;
+  }
+
+  async listAlerts(): Promise<CleaningAlertView[]> {
+    const response = await axios.get<ApiResponse<CleaningAlertView[]>>(`${API_BASE_URL}/alerts`);
+    return response.data.data || [];
+  }
+
+  async syncPricingNow(reason = 'manual'): Promise<CleaningPricingSyncResult | null> {
+    const response = await axios.post<ApiResponse<CleaningPricingSyncResult>>(
+      `${API_BASE_URL}/pricing/sync`,
+      null,
+      { params: { reason } },
+    );
+    return response.data.data || null;
+  }
+
+  async getPricingCatalog(): Promise<CleaningPriceCatalog[]> {
+    const response = await axios.get<ApiResponse<CleaningPriceCatalog[]>>(
+      `${API_BASE_URL}/pricing/catalog`,
+    );
+    return response.data.data || [];
+  }
+
+  async check(
+    agentId: number,
+    apiKey: string,
+    payload: CleaningCheckRequest,
+  ): Promise<CleaningResponse | null> {
+    const response = await axios.post<ApiResponse<CleaningResponse>>(
+      `${API_BASE_URL}/${agentId}/check`,
+      payload,
+      { headers: { 'X-API-KEY': apiKey } },
+    );
+    return response.data.data || null;
+  }
+
+  async sanitize(
+    agentId: number,
+    apiKey: string,
+    payload: CleaningCheckRequest,
+  ): Promise<CleaningResponse | null> {
+    const response = await axios.post<ApiResponse<CleaningResponse>>(
+      `${API_BASE_URL}/${agentId}/sanitize`,
+      payload,
+      { headers: { 'X-API-KEY': apiKey } },
+    );
+    return response.data.data || null;
+  }
+
+  async createRollback(runId: number): Promise<CleaningRollbackRun | null> {
+    const response = await axios.post<ApiResponse<CleaningRollbackRun>>(
+      `${API_BASE_URL}/job-runs/${runId}/rollback`,
+    );
+    return response.data.data || null;
+  }
+
+  async getRollback(rollbackRunId: number): Promise<CleaningRollbackRun | null> {
+    const response = await axios.get<ApiResponse<CleaningRollbackRun>>(
+      `${API_BASE_URL}/rollbacks/${rollbackRunId}`,
+    );
+    return response.data.data || null;
+  }
+
   async listPolicies(): Promise<CleaningPolicyView[]> {
     const response = await axios.get<ApiResponse<CleaningPolicyView[]>>(`${API_BASE_URL}/policies`);
     return response.data.data || [];

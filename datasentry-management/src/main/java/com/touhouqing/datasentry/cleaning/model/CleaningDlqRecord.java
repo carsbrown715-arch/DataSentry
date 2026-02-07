@@ -1,0 +1,47 @@
+package com.touhouqing.datasentry.cleaning.model;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@TableName("datasentry_cleaning_dlq")
+public class CleaningDlqRecord {
+
+	@TableId(type = IdType.AUTO)
+	private Long id;
+
+	private Long jobId;
+
+	private Long jobRunId;
+
+	private Long datasourceId;
+
+	private String tableName;
+
+	private String pkJson;
+
+	private String payloadJson;
+
+	private String errorMessage;
+
+	private Integer retryCount;
+
+	private LocalDateTime nextRetryTime;
+
+	private String status;
+
+	private LocalDateTime createdTime;
+
+	private LocalDateTime updatedTime;
+
+}
