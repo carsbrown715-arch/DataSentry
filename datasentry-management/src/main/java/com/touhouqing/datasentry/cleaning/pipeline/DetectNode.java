@@ -62,8 +62,8 @@ public class DetectNode implements PipelineNode {
 				&& shouldEscalateToL3(l1Findings, l2Findings, policyConfig);
 		if (escalatedToL3) {
 			List<CleaningRule> llmRules = rules.stream()
-					.filter(rule -> CleaningRuleType.LLM.name().equalsIgnoreCase(rule.getRuleType()))
-					.toList();
+				.filter(rule -> CleaningRuleType.LLM.name().equalsIgnoreCase(rule.getRuleType()))
+				.toList();
 
 			for (CleaningRule rule : llmRules) {
 				String prompt = null;

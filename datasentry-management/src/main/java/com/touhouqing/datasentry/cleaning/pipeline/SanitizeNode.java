@@ -16,7 +16,8 @@ public class SanitizeNode implements PipelineNode {
 			return NodeResult.skipped();
 		}
 		// Allow sanitization even if verdict is BLOCK or REVIEW.
-		// If we can sanitize the findings, we transform the high-risk content into redacted content.
+		// If we can sanitize the findings, we transform the high-risk content into
+		// redacted content.
 
 		if (context.getFindings() == null || context.getFindings().isEmpty()) {
 			context.setSanitizedText(context.getOriginalText());
@@ -35,10 +36,12 @@ public class SanitizeNode implements PipelineNode {
 		}
 
 		// Check if we should quarantine high-risk content (keep BLOCK verdict)
-		// Default behavior (MITIGATE) is to update verdict to REDACTED if sanitization occurred
+		// Default behavior (MITIGATE) is to update verdict to REDACTED if sanitization
+		// occurred
 		if ("QUARANTINE".equalsIgnoreCase(mode) && context.getVerdict() == CleaningVerdict.BLOCK) {
 			// Keep BLOCK verdict - risk is contained but writeback is prevented
-		} else {
+		}
+		else {
 			// In MITIGATE mode, or for non-BLOCK verdicts, we consider the risk mitigated
 			context.setVerdict(CleaningVerdict.REDACTED);
 		}
