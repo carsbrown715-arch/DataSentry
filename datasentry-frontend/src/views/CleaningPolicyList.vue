@@ -413,6 +413,63 @@
             </el-form-item>
           </template>
 
+          <template v-else-if="ruleForm.ruleType === 'L2_DUMMY'">
+            <el-form-item label="检测模式">
+              <el-radio-group v-model="ruleForm.l2Mode">
+                <el-radio-button label="REGEX">关键词正则</el-radio-button>
+                <el-radio-button label="ENTROPY">乱码检测 (熵)</el-radio-button>
+                <el-radio-button label="REPETITION">重复检测</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+
+            <template v-if="ruleForm.l2Mode === 'REGEX'">
+              <el-form-item label="正则表达式">
+                <el-input
+                  v-model="ruleForm.regexPattern"
+                  placeholder="例如：(?i)(代开票|发票|保真)"
+                />
+                <div class="field-help">匹配风险内容的正则表达式 (支持 Java Regex 语法)。</div>
+              </el-form-item>
+              <el-form-item label="风险阈值">
+                <el-input-number
+                  v-model="ruleForm.l2RegexThreshold"
+                  :min="0"
+                  :max="1"
+                  :step="0.05"
+                />
+                <div class="field-help">命中规则后的风险评分 (0.0 - 1.0)。</div>
+              </el-form-item>
+            </template>
+
+            <template v-else-if="ruleForm.l2Mode === 'ENTROPY'">
+              <el-form-item label="熵值阈值">
+                <el-input-number
+                  v-model="ruleForm.l2EntropyThreshold"
+                  :min="0"
+                  :max="8"
+                  :step="0.1"
+                />
+                <div class="field-help">
+                  Shannon 熵阈值 (默认 4.8)。数值越高，允许的随机性越大；数值越低，越容易把随机乱码判定为异常。
+                </div>
+              </el-form-item>
+            </template>
+
+            <template v-else-if="ruleForm.l2Mode === 'REPETITION'">
+              <el-form-item label="最大重复次数">
+                <el-input-number
+                  v-model="ruleForm.l2MaxRepetition"
+                  :min="1"
+                  :max="100"
+                  :step="1"
+                />
+                <div class="field-help">
+                  允许的最大重复字符数 (默认 10)。例如设为 5，则 "aaaaaa" (6个a) 会被判定为异常。
+                </div>
+              </el-form-item>
+            </template>
+          </template>
+
           <template v-else-if="ruleForm.ruleType === 'LLM'">
             <el-form-item label="提示词 (Prompt)">
               <el-input
@@ -530,6 +587,10 @@
     regexMaskMode: 'PLACEHOLDER',
     regexMaskText: '[REDACTED]',
     llmPrompt: '',
+    l2Mode: 'REGEX', // REGEX, ENTROPY, REPETITION
+    l2EntropyThreshold: 4.8,
+    l2MaxRepetition: 10,
+    l2RegexThreshold: 0.8,
     showAdvancedConfig: false,
     configJson: '',
   });
@@ -973,6 +1034,14 @@
     } else if (isBeginnerMode.value) {
       ruleForm.showAdvancedConfig = false;
     }
+
+    if (nextType === 'L2_DUMMY') {
+      ruleForm.l2Mode = 'REGEX';
+      ruleForm.regexPattern = '';
+      ruleForm.l2RegexThreshold = 0.8;
+      ruleForm.l2EntropyThreshold = 4.8;
+      ruleForm.l2MaxRepetition = 10;
+    }
   };
 
   const openRuleDialog = rule => {
@@ -1019,6 +1088,27 @@
       }
     } else if (ruleForm.ruleType === 'LLM') {
       ruleForm.llmPrompt = String(parsedConfig.prompt || '');
+    } else if (ruleForm.ruleType === 'L2_DUMMY') {
+      // Determine mode based on category or existing config
+      const cat = rule.category || '';
+      if (cat === 'ANOMALY_ENTROPY') {
+        ruleForm.l2Mode = 'ENTROPY';
+        ruleForm.l2EntropyThreshold =
+          parsedConfig.threshold !== undefined ? Number(parsedConfig.threshold) : 4.8;
+      } else if (cat === 'ANOMALY_REPETITION') {
+        ruleForm.l2Mode = 'REPETITION';
+        ruleForm.l2MaxRepetition =
+          parsedConfig.maxRepetition !== undefined ? Number(parsedConfig.maxRepetition) : 10;
+      } else if (cat === 'L2_REGEX') {
+        ruleForm.l2Mode = 'REGEX';
+        ruleForm.regexPattern = String(parsedConfig.pattern || '');
+        ruleForm.l2RegexThreshold =
+          parsedConfig.threshold !== undefined ? Number(parsedConfig.threshold) : 0.8;
+      } else {
+        // Fallback or default
+        ruleForm.l2Mode = 'REGEX';
+        ruleForm.regexPattern = String(parsedConfig.pattern || '');
+      }
     } else {
       ruleForm.regexPattern = '';
       ruleForm.regexFlags = ['CASE_INSENSITIVE'];
@@ -1094,14 +1184,40 @@
       };
     }
 
+    if (ruleForm.ruleType === 'L2_DUMMY') {
+      const mode = ruleForm.l2Mode;
+      if (mode === 'ENTROPY') {
+        return {
+          threshold: Number(ruleForm.l2EntropyThreshold),
+        };
+      } else if (mode === 'REPETITION') {
+        return {
+          maxRepetition: Number(ruleForm.l2MaxRepetition),
+        };
+      } else {
+        // REGEX
+        return {
+          pattern: ruleForm.regexPattern,
+          threshold: Number(ruleForm.l2RegexThreshold),
+        };
+      }
+    }
+
     return {};
   };
 
   const saveRule = async () => {
-    const category =
+    let category =
       ruleForm.categoryPreset === '__CUSTOM__'
         ? String(ruleForm.customCategory || '').trim()
         : String(ruleForm.categoryPreset || '').trim();
+
+    // Auto-set category for L2_DUMMY based on mode
+    if (ruleForm.ruleType === 'L2_DUMMY') {
+      if (ruleForm.l2Mode === 'ENTROPY') category = 'ANOMALY_ENTROPY';
+      else if (ruleForm.l2Mode === 'REPETITION') category = 'ANOMALY_REPETITION';
+      else category = 'L2_REGEX';
+    }
 
     if (!ruleForm.name || !ruleForm.ruleType || !category) {
       ElMessage.warning('请填写完整规则信息');

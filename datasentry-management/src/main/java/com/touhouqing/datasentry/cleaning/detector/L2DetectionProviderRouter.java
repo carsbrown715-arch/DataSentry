@@ -17,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class L2DetectionProviderRouter {
 
-	private final DummyL2DetectionProvider dummyProvider;
+	private final HeuristicL2DetectionProvider heuristicProvider;
 
 	private final OnnxL2DetectionProvider onnxProvider;
 
@@ -42,7 +42,7 @@ public class L2DetectionProviderRouter {
 		if (!provider.isReady()) {
 			opsStateService.setL2ProviderStatus(provider.name() + "/DEGRADED");
 			markFallback(provider);
-			return dummyProvider.detect(text, rule, config);
+			return heuristicProvider.detect(text, rule, config);
 		}
 		try {
 			List<Finding> result = provider.detect(text, rule, config);
@@ -52,11 +52,11 @@ public class L2DetectionProviderRouter {
 		catch (Exception e) {
 			log.warn("L2 provider failed: {}", provider.name(), e);
 			opsStateService.setL2ProviderStatus(provider.name() + "/DEGRADED");
-			if (provider == dummyProvider) {
+			if (provider == heuristicProvider) {
 				return List.of();
 			}
 			markFallback(provider);
-			return dummyProvider.detect(text, rule, config);
+			return heuristicProvider.detect(text, rule, config);
 		}
 	}
 
@@ -77,7 +77,7 @@ public class L2DetectionProviderRouter {
 		if ("CLOUD_API".equalsIgnoreCase(provider) || "CLOUD".equalsIgnoreCase(provider)) {
 			return cloudApiProvider;
 		}
-		return dummyProvider;
+		return heuristicProvider;
 	}
 
 }

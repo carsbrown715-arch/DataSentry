@@ -60,8 +60,8 @@ public class CleaningMetaService {
 					.build(),
 				CleaningOptionItemView.builder()
 					.code("L2_DUMMY")
-					.labelZh("轻量模型规则（L2）")
-					.description("使用轻量模型打分，适合灰度验证和成本控制")
+					.labelZh("L2 启发式规则")
+					.description("包含正则拦截、乱码检测、重复检测等多种启发式策略")
 					.configSchemaHint("{}")
 					.sampleConfig(Map.of())
 					.build(),
@@ -194,7 +194,7 @@ public class CleaningMetaService {
 	private Map<String, Map<String, Boolean>> ruleTypeUiBehavior() {
 		Map<String, Map<String, Boolean>> behavior = new LinkedHashMap<>();
 		behavior.put("REGEX", Map.of("showStructuredConfig", true, "showAdvancedJson", true));
-		behavior.put("L2_DUMMY", Map.of("showStructuredConfig", false, "showAdvancedJson", false));
+		behavior.put("L2_DUMMY", Map.of("showStructuredConfig", true, "showAdvancedJson", true));
 		behavior.put("LLM", Map.of("showStructuredConfig", false, "showAdvancedJson", false));
 		return behavior;
 	}

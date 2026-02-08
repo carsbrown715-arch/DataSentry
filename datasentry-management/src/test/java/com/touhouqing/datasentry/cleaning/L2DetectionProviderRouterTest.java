@@ -1,7 +1,7 @@
 package com.touhouqing.datasentry.cleaning;
 
 import com.touhouqing.datasentry.cleaning.detector.CloudApiL2DetectionProvider;
-import com.touhouqing.datasentry.cleaning.detector.DummyL2DetectionProvider;
+import com.touhouqing.datasentry.cleaning.detector.HeuristicL2DetectionProvider;
 import com.touhouqing.datasentry.cleaning.detector.L2DetectionProviderRouter;
 import com.touhouqing.datasentry.cleaning.detector.OnnxL2DetectionProvider;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicyConfig;
@@ -24,7 +24,7 @@ public class L2DetectionProviderRouterTest {
 		DataSentryProperties properties = new DataSentryProperties();
 		properties.getCleaning().getL2().setProvider("DUMMY");
 		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
-		L2DetectionProviderRouter router = new L2DetectionProviderRouter(new DummyL2DetectionProvider(),
+		L2DetectionProviderRouter router = new L2DetectionProviderRouter(new HeuristicL2DetectionProvider(),
 				new OnnxL2DetectionProvider(properties, opsStateService),
 				new CloudApiL2DetectionProvider(properties, opsStateService, HttpClient.newHttpClient()), properties,
 				opsStateService);
@@ -41,7 +41,7 @@ public class L2DetectionProviderRouterTest {
 		properties.getCleaning().getL2().setProvider("ONNX");
 		properties.getCleaning().getL2().setOnnxModelPath("/tmp/not-exists.onnx");
 		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
-		L2DetectionProviderRouter router = new L2DetectionProviderRouter(new DummyL2DetectionProvider(),
+		L2DetectionProviderRouter router = new L2DetectionProviderRouter(new HeuristicL2DetectionProvider(),
 				new OnnxL2DetectionProvider(properties, opsStateService),
 				new CloudApiL2DetectionProvider(properties, opsStateService, HttpClient.newHttpClient()), properties,
 				opsStateService);
@@ -58,7 +58,7 @@ public class L2DetectionProviderRouterTest {
 		DataSentryProperties properties = new DataSentryProperties();
 		properties.getCleaning().getL2().setProvider("CLOUD_API");
 		CleaningOpsStateService opsStateService = new CleaningOpsStateService();
-		L2DetectionProviderRouter router = new L2DetectionProviderRouter(new DummyL2DetectionProvider(),
+		L2DetectionProviderRouter router = new L2DetectionProviderRouter(new HeuristicL2DetectionProvider(),
 				new OnnxL2DetectionProvider(properties, opsStateService),
 				new CloudApiL2DetectionProvider(properties, opsStateService, HttpClient.newHttpClient()), properties,
 				opsStateService);

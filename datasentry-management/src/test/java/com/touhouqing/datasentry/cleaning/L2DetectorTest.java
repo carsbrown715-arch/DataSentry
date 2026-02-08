@@ -1,7 +1,7 @@
 package com.touhouqing.datasentry.cleaning;
 
 import com.touhouqing.datasentry.cleaning.detector.CloudApiL2DetectionProvider;
-import com.touhouqing.datasentry.cleaning.detector.DummyL2DetectionProvider;
+import com.touhouqing.datasentry.cleaning.detector.HeuristicL2DetectionProvider;
 import com.touhouqing.datasentry.cleaning.detector.L2DetectionProviderRouter;
 import com.touhouqing.datasentry.cleaning.detector.L2Detector;
 import com.touhouqing.datasentry.cleaning.detector.OnnxL2DetectionProvider;
@@ -24,14 +24,14 @@ public class L2DetectorTest {
 
 	private final CleaningOpsStateService opsStateService = new CleaningOpsStateService();
 
-	private final DummyL2DetectionProvider dummyProvider = new DummyL2DetectionProvider();
+	private final HeuristicL2DetectionProvider heuristicProvider = new HeuristicL2DetectionProvider();
 
 	private final OnnxL2DetectionProvider onnxProvider = new OnnxL2DetectionProvider(properties, opsStateService);
 
 	private final CloudApiL2DetectionProvider cloudApiProvider = new CloudApiL2DetectionProvider(properties,
 			opsStateService, HttpClient.newHttpClient());
 
-	private final L2DetectionProviderRouter providerRouter = new L2DetectionProviderRouter(dummyProvider, onnxProvider,
+	private final L2DetectionProviderRouter providerRouter = new L2DetectionProviderRouter(heuristicProvider, onnxProvider,
 			cloudApiProvider, properties, opsStateService);
 
 	private final L2Detector detector = new L2Detector(providerRouter);

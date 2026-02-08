@@ -59,9 +59,9 @@ export const FALLBACK_OPTIONS: CleaningOptionMetaView = {
     },
     {
       code: 'L2_DUMMY',
-      labelZh: '轻量模型规则（L2）',
-      description: '轻量打分，成本低',
-      configSchemaHint: '{}',
+      labelZh: 'L2 启发式规则',
+      description: '包含正则拦截、乱码检测、重复检测等多种启发式策略',
+      configSchemaHint: '{"pattern":"...","threshold":0.8}',
       sampleConfig: {},
     },
     {
@@ -171,7 +171,7 @@ export const FALLBACK_OPTIONS: CleaningOptionMetaView = {
   },
   ruleTypeUiBehavior: {
     REGEX: { showStructuredConfig: true, showAdvancedJson: true },
-    L2_DUMMY: { showStructuredConfig: false, showAdvancedJson: true },
+    L2_DUMMY: { showStructuredConfig: true, showAdvancedJson: true },
     LLM: { showStructuredConfig: false, showAdvancedJson: true },
   },
   ruleTypeSchemas: {
