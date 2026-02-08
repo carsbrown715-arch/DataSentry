@@ -42,7 +42,7 @@ public class DetectNodeFailClosedTest {
 
 		node.process(context);
 
-		verify(llmDetector, never()).detect(anyString());
+		verify(llmDetector, never()).detect(anyString(), any());
 		assertEquals(List.of(), context.getFindings());
 	}
 
@@ -54,7 +54,7 @@ public class DetectNodeFailClosedTest {
 		DetectNode node = new DetectNode(regexDetector, l2Detector, llmDetector);
 		when(regexDetector.detect(anyString(), any())).thenReturn(List.of());
 		when(l2Detector.detect(anyString(), any(), any())).thenReturn(List.of(Finding.builder().severity(0.6).build()));
-		when(llmDetector.detect(anyString())).thenReturn(List.of(Finding.builder().category("X").build()));
+		when(llmDetector.detect(anyString(), any())).thenReturn(List.of(Finding.builder().category("X").build()));
 
 		CleaningPolicySnapshot snapshot = CleaningPolicySnapshot.builder()
 			.config(CleaningPolicyConfig.builder().llmEnabled(true).build())
@@ -65,7 +65,7 @@ public class DetectNodeFailClosedTest {
 
 		node.process(context);
 
-		verify(llmDetector).detect(anyString());
+		verify(llmDetector).detect(anyString(), any());
 		assertEquals(2, context.getFindings().size());
 	}
 
