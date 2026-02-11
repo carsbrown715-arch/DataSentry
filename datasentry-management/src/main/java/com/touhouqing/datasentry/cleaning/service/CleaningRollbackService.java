@@ -4,15 +4,20 @@ import com.touhouqing.datasentry.cleaning.enums.CleaningRollbackStatus;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningBackupRecordMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningJobMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningJobRunMapper;
+import com.touhouqing.datasentry.cleaning.mapper.CleaningRollbackConflictRecordMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningRollbackRunMapper;
+import com.touhouqing.datasentry.cleaning.mapper.CleaningRollbackVerifyRecordMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningBackupRecord;
 import com.touhouqing.datasentry.cleaning.model.CleaningJob;
 import com.touhouqing.datasentry.cleaning.model.CleaningJobRun;
+import com.touhouqing.datasentry.cleaning.model.CleaningRollbackConflictRecord;
 import com.touhouqing.datasentry.cleaning.model.CleaningRollbackRun;
+import com.touhouqing.datasentry.cleaning.model.CleaningRollbackVerifyRecord;
 import com.touhouqing.datasentry.connector.pool.DBConnectionPool;
 import com.touhouqing.datasentry.connector.pool.DBConnectionPoolFactory;
 import com.touhouqing.datasentry.entity.Datasource;
 import com.touhouqing.datasentry.exception.InvalidInputException;
+import com.touhouqing.datasentry.properties.DataSentryProperties;
 import com.touhouqing.datasentry.service.datasource.DatasourceService;
 import com.touhouqing.datasentry.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +26,9 @@ import org.springframework.stereotype.Service;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +55,12 @@ public class CleaningRollbackService {
 
 	private final CleaningBackupEncryptionService encryptionService;
 
+	private final CleaningRollbackVerifyRecordMapper rollbackVerifyRecordMapper;
+
+	private final CleaningRollbackConflictRecordMapper rollbackConflictRecordMapper;
+
+	private final DataSentryProperties dataSentryProperties;
+
 	public CleaningRollbackRun createRollbackRun(Long runId) {
 		CleaningJobRun jobRun = jobRunMapper.selectById(runId);
 		if (jobRun == null) {
@@ -63,6 +76,8 @@ public class CleaningRollbackService {
 			.totalTarget(0L)
 			.totalSuccess(0L)
 			.totalFailed(0L)
+			.verifyStatus(dataSentryProperties.getCleaning().isRollbackVerificationEnabled() ? "PENDING" : null)
+			.conflictLevelSummary(null)
 			.createdTime(now)
 			.updatedTime(now)
 			.build();
@@ -98,23 +113,47 @@ public class CleaningRollbackService {
 		Long totalTarget = defaultLong(run.getTotalTarget());
 		Long totalSuccess = defaultLong(run.getTotalSuccess());
 		Long totalFailed = defaultLong(run.getTotalFailed());
+		int highConflicts = 0;
+		int mediumConflicts = 0;
+		int lowConflicts = 0;
 		try (Connection connection = pool.getConnection(datasourceService.getDbConfig(datasource))) {
 			while (true) {
 				List<CleaningBackupRecord> records = backupRecordMapper.findByRunAfterId(run.getJobRunId(),
 						checkpointId, BATCH_SIZE);
 				if (records.isEmpty()) {
-					rollbackRunMapper.updateStatus(run.getId(), CleaningRollbackStatus.SUCCEEDED.name(),
-							LocalDateTime.now(), LocalDateTime.now());
+					LocalDateTime now = LocalDateTime.now();
+					if (dataSentryProperties.getCleaning().isRollbackVerificationEnabled()) {
+						String verifyStatus = resolveRunVerifyStatus(totalFailed, highConflicts, mediumConflicts);
+						String conflictSummary = String.format("HIGH:%d,MEDIUM:%d,LOW:%d", highConflicts,
+								mediumConflicts, lowConflicts);
+						rollbackRunMapper.updateVerification(run.getId(), verifyStatus, conflictSummary, now);
+					}
+					rollbackRunMapper.updateStatus(run.getId(), CleaningRollbackStatus.SUCCEEDED.name(), now, now);
 					return;
 				}
 				for (CleaningBackupRecord record : records) {
 					totalTarget++;
-					boolean ok = restoreRecord(connection, record);
-					if (ok) {
+					RestoreResult restoreResult = restoreRecord(connection, record);
+					if (restoreResult.success()) {
 						totalSuccess++;
 					}
 					else {
 						totalFailed++;
+					}
+					if (dataSentryProperties.getCleaning().isRollbackVerificationEnabled()) {
+						VerifyResult verifyResult = verifyRestoredRow(connection, record, restoreResult.beforeRow());
+						recordVerify(run.getId(), record, verifyResult);
+						if (!verifyResult.passed()) {
+							int conflictCount = verifyResult.conflictColumns() != null
+									? verifyResult.conflictColumns().size() : 0;
+							String level = resolveConflictLevel(restoreResult.success(), conflictCount);
+							recordConflict(run.getId(), record, level, verifyResult.message());
+							switch (level) {
+								case "HIGH" -> highConflicts++;
+								case "MEDIUM" -> mediumConflicts++;
+								default -> lowConflicts++;
+							}
+						}
 					}
 					checkpointId = record.getId();
 				}
@@ -129,23 +168,127 @@ public class CleaningRollbackService {
 		}
 	}
 
-	private boolean restoreRecord(Connection connection, CleaningBackupRecord record) {
+	private RestoreResult restoreRecord(Connection connection, CleaningBackupRecord record) {
 		try {
 			Map<String, Object> beforeRow = loadBeforeRow(record);
 			if (beforeRow.isEmpty()) {
-				return false;
+				return RestoreResult.failed(beforeRow, "beforeRow empty");
 			}
 			PkRef pkRef = resolvePk(record.getPkJson());
 			if (pkRef == null) {
-				return false;
+				return RestoreResult.failed(beforeRow, "pk missing");
 			}
 			executeUpdate(connection, record.getTableName(), beforeRow, pkRef);
-			return true;
+			return RestoreResult.success(beforeRow);
 		}
 		catch (Exception e) {
 			log.warn("Failed to restore backup record {}", record.getId(), e);
+			return RestoreResult.failed(new LinkedHashMap<>(), e.getMessage());
+		}
+	}
+
+	private VerifyResult verifyRestoredRow(Connection connection, CleaningBackupRecord record,
+			Map<String, Object> expected) {
+		try {
+			if (expected == null || expected.isEmpty()) {
+				return VerifyResult.failed("beforeRow empty", List.of());
+			}
+			PkRef pkRef = resolvePk(record.getPkJson());
+			if (pkRef == null) {
+				return VerifyResult.failed("pk missing", List.of());
+			}
+			Map<String, Object> actual = queryCurrentRow(connection, record.getTableName(), expected.keySet(), pkRef);
+			if (actual.isEmpty()) {
+				return VerifyResult.failed("row not found", List.of("ROW_MISSING"));
+			}
+			List<String> conflicts = new ArrayList<>();
+			for (Map.Entry<String, Object> entry : expected.entrySet()) {
+				Object actualValue = actual.get(entry.getKey());
+				if (!isValueEqual(entry.getValue(), actualValue)) {
+					conflicts.add(entry.getKey());
+				}
+			}
+			if (conflicts.isEmpty()) {
+				return VerifyResult.success();
+			}
+			return VerifyResult.failed("columns mismatch: " + String.join(",", conflicts), conflicts);
+		}
+		catch (Exception e) {
+			return VerifyResult.failed("verify exception: " + e.getMessage(), List.of());
+		}
+	}
+
+	private Map<String, Object> queryCurrentRow(Connection connection, String tableName, java.util.Set<String> columns,
+			PkRef pkRef) throws Exception {
+		String selectClause = String.join(",", columns);
+		String sql = "SELECT " + selectClause + " FROM " + tableName + " WHERE " + pkRef.column() + " = ? LIMIT 1";
+		Map<String, Object> row = new LinkedHashMap<>();
+		try (PreparedStatement statement = connection.prepareStatement(sql)) {
+			statement.setObject(1, pkRef.value());
+			try (ResultSet resultSet = statement.executeQuery()) {
+				if (!resultSet.next()) {
+					return row;
+				}
+				for (String column : columns) {
+					row.put(column, resultSet.getObject(column));
+				}
+			}
+		}
+		return row;
+	}
+
+	private boolean isValueEqual(Object left, Object right) {
+		if (left == null && right == null) {
+			return true;
+		}
+		if (left == null || right == null) {
 			return false;
 		}
+		return String.valueOf(left).equals(String.valueOf(right));
+	}
+
+	private void recordVerify(Long rollbackRunId, CleaningBackupRecord record, VerifyResult result) {
+		rollbackVerifyRecordMapper.insert(CleaningRollbackVerifyRecord.builder()
+			.rollbackRunId(rollbackRunId)
+			.backupRecordId(record.getId())
+			.status(result.passed() ? "PASSED" : "FAILED")
+			.verifyMessage(result.message())
+			.createdTime(LocalDateTime.now())
+			.build());
+	}
+
+	private void recordConflict(Long rollbackRunId, CleaningBackupRecord record, String level, String reason) {
+		rollbackConflictRecordMapper.insert(CleaningRollbackConflictRecord.builder()
+			.rollbackRunId(rollbackRunId)
+			.backupRecordId(record.getId())
+			.level(level)
+			.reason(reason)
+			.resolved(0)
+			.createdTime(LocalDateTime.now())
+			.build());
+	}
+
+	private String resolveConflictLevel(boolean restoreSuccess, int conflictSize) {
+		if (!restoreSuccess) {
+			return "HIGH";
+		}
+		if (conflictSize >= 3) {
+			return "HIGH";
+		}
+		if (conflictSize == 2) {
+			return "MEDIUM";
+		}
+		return "LOW";
+	}
+
+	private String resolveRunVerifyStatus(Long totalFailed, int highConflicts, int mediumConflicts) {
+		if (defaultLong(totalFailed) == 0L && highConflicts == 0 && mediumConflicts == 0) {
+			return "PASSED";
+		}
+		if (highConflicts > 0) {
+			return "FAILED";
+		}
+		return "PARTIAL";
 	}
 
 	private Map<String, Object> loadBeforeRow(CleaningBackupRecord record) {
@@ -197,6 +340,9 @@ public class CleaningRollbackService {
 
 	private void failRun(Long runId, String reason) {
 		log.warn("Cleaning rollback run {} failed: {}", runId, reason);
+		if (dataSentryProperties.getCleaning().isRollbackVerificationEnabled()) {
+			rollbackRunMapper.updateVerification(runId, "FAILED", "HIGH:0,MEDIUM:0,LOW:0", LocalDateTime.now());
+		}
 		rollbackRunMapper.updateStatus(runId, CleaningRollbackStatus.FAILED.name(), LocalDateTime.now(),
 				LocalDateTime.now());
 	}
@@ -206,6 +352,30 @@ public class CleaningRollbackService {
 	}
 
 	private record PkRef(String column, Object value) {
+	}
+
+	private record RestoreResult(boolean success, Map<String, Object> beforeRow, String message) {
+
+		private static RestoreResult success(Map<String, Object> beforeRow) {
+			return new RestoreResult(true, beforeRow, null);
+		}
+
+		private static RestoreResult failed(Map<String, Object> beforeRow, String message) {
+			return new RestoreResult(false, beforeRow, message);
+		}
+
+	}
+
+	private record VerifyResult(boolean passed, String message, List<String> conflictColumns) {
+
+		private static VerifyResult success() {
+			return new VerifyResult(true, "PASSED", List.of());
+		}
+
+		private static VerifyResult failed(String message, List<String> conflictColumns) {
+			return new VerifyResult(false, message, conflictColumns != null ? conflictColumns : List.of());
+		}
+
 	}
 
 }

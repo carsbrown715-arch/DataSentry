@@ -1,7 +1,10 @@
 package com.touhouqing.datasentry.cleaning.controller;
 
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyPublishRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRollbackVersionRequest;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRuleUpdateRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyVersionView;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyView;
 import com.touhouqing.datasentry.cleaning.dto.CleaningRuleRequest;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicy;
@@ -49,6 +52,24 @@ public class CleaningPolicyController {
 			@RequestBody @Valid CleaningPolicyRuleUpdateRequest request) {
 		policyService.updatePolicyRules(policyId, request);
 		return ResponseEntity.ok(ApiResponse.success("success"));
+	}
+
+	@GetMapping("/policies/{policyId}/versions")
+	public ResponseEntity<ApiResponse<List<CleaningPolicyVersionView>>> listPolicyVersions(
+			@PathVariable Long policyId) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.listPolicyVersions(policyId)));
+	}
+
+	@PostMapping("/policies/{policyId}/publish")
+	public ResponseEntity<ApiResponse<CleaningPolicyVersionView>> publishPolicy(@PathVariable Long policyId,
+			@RequestBody(required = false) CleaningPolicyPublishRequest request) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.publishPolicy(policyId, request)));
+	}
+
+	@PostMapping("/policies/{policyId}/rollback-version")
+	public ResponseEntity<ApiResponse<CleaningPolicyVersionView>> rollbackPolicyVersion(@PathVariable Long policyId,
+			@RequestBody @Valid CleaningPolicyRollbackVersionRequest request) {
+		return ResponseEntity.ok(ApiResponse.success("success", policyService.rollbackToVersion(policyId, request)));
 	}
 
 	@GetMapping("/rules")

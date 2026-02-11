@@ -52,8 +52,23 @@
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="240" fixed="right">
+                <el-table-column label="操作" width="380" fixed="right">
                   <template #default="scope">
+                    <el-button
+                      size="small"
+                      type="success"
+                      :loading="publishLoadingMap[scope.row.id]"
+                      @click="publishPolicyVersion(scope.row)"
+                    >
+                      发布
+                    </el-button>
+                    <el-button
+                      size="small"
+                      :loading="versionLoadingMap[scope.row.id]"
+                      @click="openVersionDialog(scope.row)"
+                    >
+                      版本
+                    </el-button>
                     <el-button size="small" type="primary" @click="openPolicyDialog(scope.row)">
                       编辑
                     </el-button>
@@ -272,6 +287,70 @@
         <template #footer>
           <el-button @click="bindingDialogVisible = false">取消</el-button>
           <el-button type="primary" @click="saveBinding">保存绑定</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+        v-model="versionDialogVisible"
+        :title="`策略版本历史${selectedVersionPolicy ? ` - ${selectedVersionPolicy.name}` : ''}`"
+        width="820px"
+        :close-on-click-modal="false"
+        @closed="closeVersionDialog"
+      >
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          class="inline-alert"
+          title="发布会创建新版本快照；回滚会将目标版本重新置为已发布。"
+        />
+        <el-table
+          :data="policyVersions"
+          style="width: 100%"
+          stripe
+          v-loading="loadingPolicyVersions"
+        >
+          <el-table-column prop="versionNo" label="版本号" width="100" />
+          <el-table-column label="状态" width="120">
+            <template #default="scope">
+              <el-tag :type="formatVersionStatusTag(scope.row.status)" size="small">
+                {{ formatVersionStatus(scope.row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="默认动作" min-width="160">
+            <template #default="scope">
+              {{ formatDefaultAction(scope.row.defaultAction) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="更新时间" min-width="180">
+            <template #default="scope">
+              {{ formatDateTime(scope.row.updatedTime || scope.row.createdTime) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="scope">
+              <el-button
+                size="small"
+                type="warning"
+                :disabled="scope.row.status === 'PUBLISHED'"
+                :loading="rollbackVersionLoadingMap[scope.row.id]"
+                @click="rollbackPolicyVersion(scope.row)"
+              >
+                回滚到此版本
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <template #footer>
+          <el-button @click="versionDialogVisible = false">关闭</el-button>
+          <el-button
+            type="primary"
+            :loading="refreshVersionsLoading"
+            @click="loadPolicyVersions(selectedVersionPolicy?.id)"
+          >
+            刷新
+          </el-button>
         </template>
       </el-dialog>
 
@@ -539,6 +618,14 @@
   const loadingPolicies = ref(false);
   const loadingRules = ref(false);
   const bindingAgents = ref([]);
+  const publishLoadingMap = reactive({});
+  const versionLoadingMap = reactive({});
+  const rollbackVersionLoadingMap = reactive({});
+  const versionDialogVisible = ref(false);
+  const selectedVersionPolicy = ref(null);
+  const policyVersions = ref([]);
+  const loadingPolicyVersions = ref(false);
+  const refreshVersionsLoading = ref(false);
 
   const uiMode = ref(readCleaningUiMode());
   const optionMeta = ref(mergeOptionsWithFallback(null));
@@ -864,6 +951,37 @@
     }
   };
 
+  const normalizeApiError = error => {
+    const message = error?.response?.data?.message || error?.message;
+    return message && String(message).trim() ? String(message) : null;
+  };
+
+  const formatDateTime = value => {
+    if (!value) {
+      return '-';
+    }
+    return String(value).replace('T', ' ');
+  };
+
+  const formatVersionStatus = status => {
+    const labels = {
+      DRAFT: '草稿',
+      PUBLISHED: '已发布',
+      ROLLED_BACK: '已回退',
+    };
+    return labels[status] || status || '-';
+  };
+
+  const formatVersionStatusTag = status => {
+    if (status === 'PUBLISHED') {
+      return 'success';
+    }
+    if (status === 'ROLLED_BACK') {
+      return 'info';
+    }
+    return 'primary';
+  };
+
   const loadOptionMeta = async () => {
     const remote = await cleaningMetaService.getOptions();
     optionMeta.value = mergeOptionsWithFallback(remote);
@@ -924,6 +1042,111 @@
     });
 
     policyDialogVisible.value = true;
+  };
+
+  const loadPolicyVersions = async (policyId, { asRefresh = false } = {}) => {
+    if (!policyId) {
+      policyVersions.value = [];
+      return;
+    }
+    if (asRefresh) {
+      refreshVersionsLoading.value = true;
+    } else {
+      loadingPolicyVersions.value = true;
+      versionLoadingMap[policyId] = true;
+    }
+    try {
+      policyVersions.value = await cleaningService.listPolicyVersions(policyId);
+    } catch (error) {
+      const message = normalizeApiError(error);
+      ElMessage.error(message || '加载策略版本失败');
+      policyVersions.value = [];
+    } finally {
+      if (asRefresh) {
+        refreshVersionsLoading.value = false;
+      } else {
+        loadingPolicyVersions.value = false;
+        versionLoadingMap[policyId] = false;
+      }
+    }
+  };
+
+  const openVersionDialog = async policy => {
+    selectedVersionPolicy.value = policy;
+    versionDialogVisible.value = true;
+    await loadPolicyVersions(policy?.id);
+  };
+
+  const closeVersionDialog = () => {
+    selectedVersionPolicy.value = null;
+    policyVersions.value = [];
+    refreshVersionsLoading.value = false;
+  };
+
+  const publishPolicyVersion = async policy => {
+    if (!policy?.id) {
+      return;
+    }
+    try {
+      await ElMessageBox.confirm(
+        `确认发布策略「${policy.name}」？发布后将冻结为新版本供作业运行绑定。`,
+        '发布确认',
+        {
+          type: 'warning',
+          confirmButtonText: '确认发布',
+          cancelButtonText: '取消',
+        },
+      );
+    } catch (error) {
+      return;
+    }
+    publishLoadingMap[policy.id] = true;
+    try {
+      await cleaningService.publishPolicy(policy.id, {});
+      await loadPolicies();
+      if (versionDialogVisible.value && selectedVersionPolicy.value?.id === policy.id) {
+        await loadPolicyVersions(policy.id, { asRefresh: true });
+      }
+      ElMessage.success('策略已发布');
+    } catch (error) {
+      const message = normalizeApiError(error);
+      ElMessage.error(message || '策略发布失败');
+    } finally {
+      publishLoadingMap[policy.id] = false;
+    }
+  };
+
+  const rollbackPolicyVersion = async version => {
+    const policy = selectedVersionPolicy.value;
+    if (!policy?.id || !version?.id) {
+      return;
+    }
+    try {
+      await ElMessageBox.confirm(
+        `确认将策略「${policy.name}」回滚到版本 v${version.versionNo}？`,
+        '回滚确认',
+        {
+          type: 'warning',
+          confirmButtonText: '确认回滚',
+          cancelButtonText: '取消',
+        },
+      );
+    } catch (error) {
+      return;
+    }
+    rollbackVersionLoadingMap[version.id] = true;
+    try {
+      await cleaningService.rollbackPolicyVersion(policy.id, {
+        versionId: version.id,
+      });
+      await Promise.all([loadPolicies(), loadPolicyVersions(policy.id, { asRefresh: true })]);
+      ElMessage.success(`已回滚到版本 v${version.versionNo}`);
+    } catch (error) {
+      const message = normalizeApiError(error);
+      ElMessage.error(message || '策略版本回滚失败');
+    } finally {
+      rollbackVersionLoadingMap[version.id] = false;
+    }
   };
 
   const ensurePolicyRiskConfirmed = async () => {

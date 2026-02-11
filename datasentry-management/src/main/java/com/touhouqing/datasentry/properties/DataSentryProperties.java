@@ -123,6 +123,21 @@ public class DataSentryProperties {
 
 		private Notification notification = new Notification();
 
+		/**
+		 * 策略发布治理开关
+		 */
+		private boolean policyGovernanceEnabled = false;
+
+		/**
+		 * Shadow 双轨对照开关
+		 */
+		private boolean shadowDualTrackEnabled = false;
+
+		/**
+		 * 回滚校验开关
+		 */
+		private boolean rollbackVerificationEnabled = false;
+
 		@Getter
 		@Setter
 		public static class Batch {

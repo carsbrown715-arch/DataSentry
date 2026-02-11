@@ -3,21 +3,31 @@ package com.touhouqing.datasentry.cleaning.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyPublishRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRollbackVersionRequest;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRuleItem;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyRuleUpdateRequest;
+import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyVersionView;
 import com.touhouqing.datasentry.cleaning.dto.CleaningPolicyView;
 import com.touhouqing.datasentry.cleaning.dto.CleaningRuleRequest;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningPolicyMapper;
+import com.touhouqing.datasentry.cleaning.mapper.CleaningPolicyReleaseTicketMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningPolicyRuleMapper;
+import com.touhouqing.datasentry.cleaning.mapper.CleaningPolicyVersionMapper;
 import com.touhouqing.datasentry.cleaning.mapper.CleaningRuleMapper;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicy;
+import com.touhouqing.datasentry.cleaning.model.CleaningPolicyReleaseTicket;
 import com.touhouqing.datasentry.cleaning.model.CleaningPolicyRule;
+import com.touhouqing.datasentry.cleaning.model.CleaningPolicyVersion;
 import com.touhouqing.datasentry.cleaning.model.CleaningRule;
 import com.touhouqing.datasentry.cleaning.model.RegexRuleConfig;
 import com.touhouqing.datasentry.exception.InvalidInputException;
+import com.touhouqing.datasentry.properties.DataSentryProperties;
 import com.touhouqing.datasentry.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,7 +40,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class CleaningPolicyService {
 
 	private static final Set<String> SUPPORTED_RULE_TYPES = Set.of("REGEX", "L2_DUMMY", "LLM");
@@ -45,6 +55,22 @@ public class CleaningPolicyService {
 	private final CleaningRuleMapper ruleMapper;
 
 	private final CleaningPolicyRuleMapper policyRuleMapper;
+
+	private final CleaningPolicyVersionMapper policyVersionMapper;
+
+	private final CleaningPolicyReleaseTicketMapper releaseTicketMapper;
+
+	private final DataSentryProperties dataSentryProperties;
+
+	public CleaningPolicyService(CleaningPolicyMapper policyMapper, CleaningRuleMapper ruleMapper,
+			CleaningPolicyRuleMapper policyRuleMapper) {
+		this.policyMapper = policyMapper;
+		this.ruleMapper = ruleMapper;
+		this.policyRuleMapper = policyRuleMapper;
+		this.policyVersionMapper = null;
+		this.releaseTicketMapper = null;
+		this.dataSentryProperties = new DataSentryProperties();
+	}
 
 	public List<CleaningPolicyView> listPolicies() {
 		List<CleaningPolicy> policies = policyMapper
@@ -198,11 +224,147 @@ public class CleaningPolicyService {
 		}
 	}
 
+	public List<CleaningPolicyVersionView> listPolicyVersions(Long policyId) {
+		ensureGovernanceDependencies();
+		if (policyMapper.selectById(policyId) == null) {
+			throw new InvalidInputException("策略不存在");
+		}
+		return policyVersionMapper
+			.selectList(new LambdaQueryWrapper<CleaningPolicyVersion>().eq(CleaningPolicyVersion::getPolicyId, policyId)
+				.orderByDesc(CleaningPolicyVersion::getVersionNo))
+			.stream()
+			.map(this::toVersionView)
+			.toList();
+	}
+
+	public CleaningPolicyVersion findPublishedVersion(Long policyId) {
+		if (policyVersionMapper == null) {
+			return null;
+		}
+		if (policyId == null) {
+			return null;
+		}
+		return policyVersionMapper.findPublished(policyId);
+	}
+
+	@Transactional(rollbackFor = Exception.class)
+	public CleaningPolicyVersionView publishPolicy(Long policyId, CleaningPolicyPublishRequest request) {
+		ensureGovernanceDependencies();
+		ensurePolicyGovernanceEnabled();
+		CleaningPolicy policy = policyMapper.selectById(policyId);
+		if (policy == null) {
+			throw new InvalidInputException("策略不存在");
+		}
+		if (policy.getEnabled() == null || policy.getEnabled() != 1) {
+			throw new InvalidInputException("策略未启用，无法发布");
+		}
+		LocalDateTime now = LocalDateTime.now();
+		policyVersionMapper.demotePublished(policyId);
+		CleaningPolicyVersion version = CleaningPolicyVersion.builder()
+			.policyId(policyId)
+			.versionNo(policyVersionMapper.nextVersionNo(policyId))
+			.status("PUBLISHED")
+			.configJson(buildPolicySnapshotJson(policy))
+			.defaultAction(policy.getDefaultAction())
+			.createdTime(now)
+			.updatedTime(now)
+			.build();
+		policyVersionMapper.insert(version);
+		releaseTicketMapper.insert(CleaningPolicyReleaseTicket.builder()
+			.policyId(policyId)
+			.versionId(version.getId())
+			.action("PUBLISH")
+			.note(request != null ? request.getNote() : null)
+			.operator(request != null ? request.getOperator() : null)
+			.createdTime(now)
+			.build());
+		return toVersionView(version);
+	}
+
+	@Transactional(rollbackFor = Exception.class)
+	public CleaningPolicyVersionView rollbackToVersion(Long policyId, CleaningPolicyRollbackVersionRequest request) {
+		ensureGovernanceDependencies();
+		ensurePolicyGovernanceEnabled();
+		if (request == null || request.getVersionId() == null) {
+			throw new InvalidInputException("versionId 不能为空");
+		}
+		if (policyMapper.selectById(policyId) == null) {
+			throw new InvalidInputException("策略不存在");
+		}
+		CleaningPolicyVersion target = policyVersionMapper
+			.selectOne(new LambdaQueryWrapper<CleaningPolicyVersion>().eq(CleaningPolicyVersion::getPolicyId, policyId)
+				.eq(CleaningPolicyVersion::getId, request.getVersionId())
+				.last("LIMIT 1"));
+		if (target == null) {
+			throw new InvalidInputException("目标策略版本不存在");
+		}
+		LocalDateTime now = LocalDateTime.now();
+		policyVersionMapper.demotePublished(policyId);
+		policyVersionMapper.update(null,
+				new LambdaUpdateWrapper<CleaningPolicyVersion>().eq(CleaningPolicyVersion::getId, target.getId())
+					.set(CleaningPolicyVersion::getStatus, "PUBLISHED")
+					.set(CleaningPolicyVersion::getUpdatedTime, now));
+		target = policyVersionMapper.selectById(target.getId());
+		releaseTicketMapper.insert(CleaningPolicyReleaseTicket.builder()
+			.policyId(policyId)
+			.versionId(target.getId())
+			.action("ROLLBACK")
+			.note(request.getNote())
+			.operator(request.getOperator())
+			.createdTime(now)
+			.build());
+		return toVersionView(target);
+	}
+
 	private String required(String value, String message) {
 		if (value == null || value.isBlank()) {
 			throw new InvalidInputException(message);
 		}
 		return value;
+	}
+
+	private void ensurePolicyGovernanceEnabled() {
+		if (!dataSentryProperties.getCleaning().isPolicyGovernanceEnabled()) {
+			throw new InvalidInputException("策略治理能力未开启");
+		}
+	}
+
+	private void ensureGovernanceDependencies() {
+		if (policyVersionMapper == null || releaseTicketMapper == null) {
+			throw new InvalidInputException("策略治理依赖未初始化");
+		}
+	}
+
+	private CleaningPolicyVersionView toVersionView(CleaningPolicyVersion version) {
+		if (version == null) {
+			return null;
+		}
+		return CleaningPolicyVersionView.builder()
+			.id(version.getId())
+			.policyId(version.getPolicyId())
+			.versionNo(version.getVersionNo())
+			.status(version.getStatus())
+			.defaultAction(version.getDefaultAction())
+			.createdTime(version.getCreatedTime())
+			.updatedTime(version.getUpdatedTime())
+			.build();
+	}
+
+	private String buildPolicySnapshotJson(CleaningPolicy policy) {
+		List<CleaningPolicyRule> policyRules = policyRuleMapper
+			.selectList(new LambdaQueryWrapper<CleaningPolicyRule>().eq(CleaningPolicyRule::getPolicyId, policy.getId())
+				.orderByDesc(CleaningPolicyRule::getPriority)
+				.orderByAsc(CleaningPolicyRule::getRuleId));
+		List<Map<String, Object>> ruleItems = new ArrayList<>();
+		for (CleaningPolicyRule rule : policyRules) {
+			ruleItems.add(Map.of("ruleId", rule.getRuleId(), "priority", rule.getPriority()));
+		}
+		Map<String, Object> snapshot = new LinkedHashMap<>();
+		snapshot.put("policyName", policy.getName());
+		snapshot.put("policyDescription", policy.getDescription());
+		snapshot.put("policyConfigJson", policy.getConfigJson());
+		snapshot.put("rules", ruleItems);
+		return toJson(snapshot);
 	}
 
 	private void validateRuleType(String ruleType) {

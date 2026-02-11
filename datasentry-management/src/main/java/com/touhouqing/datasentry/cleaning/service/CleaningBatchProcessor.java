@@ -104,11 +104,29 @@ public class CleaningBatchProcessor {
 
 	private final CleaningNotificationService notificationService;
 
+	private final CleaningShadowService shadowService;
+
 	private final CleaningJsonPathProcessor jsonPathProcessor;
 
 	private final LlmDetector llmDetector;
 
 	private final DataSentryProperties dataSentryProperties;
+
+	public CleaningBatchProcessor(CleaningJobMapper jobMapper, CleaningJobRunMapper jobRunMapper,
+			CleaningBackupRecordMapper backupRecordMapper, CleaningRecordMapper recordMapper,
+			CleaningReviewTaskMapper reviewTaskMapper, CleaningPolicyResolver policyResolver,
+			CleaningAllowlistMapper allowlistMapper, CleaningPipeline pipeline, DatasourceService datasourceService,
+			DBConnectionPoolFactory connectionPoolFactory, CleaningBackupEncryptionService encryptionService,
+			CleaningTokenEstimator tokenEstimator, CleaningPricingService pricingService,
+			CleaningCostLedgerService costLedgerService, CleaningBudgetService budgetService,
+			CleaningDlqService dlqService, CleaningNotificationService notificationService,
+			CleaningJsonPathProcessor jsonPathProcessor, LlmDetector llmDetector,
+			DataSentryProperties dataSentryProperties) {
+		this(jobMapper, jobRunMapper, backupRecordMapper, recordMapper, reviewTaskMapper, policyResolver,
+				allowlistMapper, pipeline, datasourceService, connectionPoolFactory, encryptionService, tokenEstimator,
+				pricingService, costLedgerService, budgetService, dlqService, notificationService, null,
+				jsonPathProcessor, llmDetector, dataSentryProperties);
+	}
 
 	public void processRun(CleaningJobRun run, String leaseOwner) {
 		LocalDateTime now = LocalDateTime.now();
@@ -329,6 +347,12 @@ public class CleaningBatchProcessor {
 				}
 				context.getMetrics().put("startTimeMs", System.currentTimeMillis());
 				CleaningContext result = pipeline.execute(context, sanitizeRequested);
+				CleaningShadowService.ShadowCompareOutcome shadowCompare = shadowService.compareAndRecordIfEnabled(
+						result, snapshot,
+						() -> pipeline.execute(buildShadowContext(result, snapshot), sanitizeRequested));
+				if (shadowCompare.compared()) {
+					result.getMetadata().put("shadowDiffJson", shadowCompare.diffJson());
+				}
 				contextByColumn.put(column, result);
 				if (result.getVerdict() != null && result.getVerdict().name() != null
 						&& !"ALLOW".equals(result.getVerdict().name())) {
@@ -446,6 +470,7 @@ public class CleaningBatchProcessor {
 					.metricsJson(toJsonSafe(context.getMetrics()))
 					.executionTimeMs(resolveExecutionTime(context))
 					.detectorSource(resolveDetectorSource(context.getFindings()))
+					.shadowDiffJson(resolveShadowDiffJson(context))
 					.createdTime(LocalDateTime.now())
 					.build();
 				recordMapper.insert(record);
@@ -987,6 +1012,35 @@ public class CleaningBatchProcessor {
 			.createdTime(now)
 			.updatedTime(now)
 			.build();
+	}
+
+	private CleaningContext buildShadowContext(CleaningContext mainResult, CleaningPolicySnapshot snapshot) {
+		CleaningContext shadowContext = CleaningContext.builder()
+			.agentId(mainResult.getAgentId())
+			.traceId(mainResult.getTraceId())
+			.originalText(mainResult.getOriginalText())
+			.policySnapshot(snapshot)
+			.jobRunId(mainResult.getJobRunId())
+			.datasourceId(mainResult.getDatasourceId())
+			.tableName(mainResult.getTableName())
+			.pkJson(mainResult.getPkJson())
+			.columnName(mainResult.getColumnName())
+			.build();
+		shadowContext.getMetadata().putAll(mainResult.getMetadata());
+		shadowContext.getMetadata().put("shadowTrack", true);
+		shadowContext.getMetrics().put("startTimeMs", System.currentTimeMillis());
+		return shadowContext;
+	}
+
+	private String resolveShadowDiffJson(CleaningContext context) {
+		if (context == null || context.getMetadata() == null) {
+			return null;
+		}
+		Object shadowDiffJson = context.getMetadata().get("shadowDiffJson");
+		if (shadowDiffJson instanceof String diffText && !diffText.isBlank()) {
+			return diffText;
+		}
+		return null;
 	}
 
 	private String resolveLastPk(String checkpointJson) {

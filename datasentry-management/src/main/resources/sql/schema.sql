@@ -285,6 +285,37 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_policy (
   INDEX idx_enabled (enabled)
 ) ENGINE=InnoDB COMMENT='清理策略表';
 
+-- 策略版本表
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_policy_version (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  policy_id BIGINT NOT NULL COMMENT '策略ID',
+  version_no INT NOT NULL COMMENT '策略版本号，从1开始',
+  status VARCHAR(32) NOT NULL DEFAULT 'DRAFT' COMMENT '状态：DRAFT/PUBLISHED/ROLLED_BACK',
+  config_json TEXT COMMENT '版本配置快照JSON',
+  default_action VARCHAR(50) DEFAULT 'DETECT_ONLY' COMMENT '默认动作快照',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  updated_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_policy_version_no (policy_id, version_no),
+  INDEX idx_policy_status (policy_id, status),
+  FOREIGN KEY (policy_id) REFERENCES datasentry_cleaning_policy(id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='清理策略版本表';
+
+-- 策略发布工单表
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_policy_release_ticket (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  policy_id BIGINT NOT NULL COMMENT '策略ID',
+  version_id BIGINT NOT NULL COMMENT '策略版本ID',
+  action VARCHAR(32) NOT NULL COMMENT '动作：PUBLISH/ROLLBACK',
+  note VARCHAR(512) DEFAULT NULL COMMENT '备注',
+  operator VARCHAR(100) DEFAULT NULL COMMENT '操作者',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  INDEX idx_policy_created (policy_id, created_time),
+  FOREIGN KEY (policy_id) REFERENCES datasentry_cleaning_policy(id) ON DELETE CASCADE,
+  FOREIGN KEY (version_id) REFERENCES datasentry_cleaning_policy_version(id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='清理策略发布工单表';
+
 -- 清理规则表
 CREATE TABLE IF NOT EXISTS datasentry_cleaning_rule (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -398,6 +429,7 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_job_run (
   heartbeat_time TIMESTAMP NULL DEFAULT NULL COMMENT '心跳时间',
   attempt INT DEFAULT 0 COMMENT '重试次数',
   checkpoint_json TEXT COMMENT '游标检查点JSON',
+  policy_version_id BIGINT DEFAULT NULL COMMENT '策略版本ID',
   policy_snapshot_json TEXT COMMENT '策略快照',
   total_scanned BIGINT DEFAULT 0 COMMENT '扫描总数',
   total_flagged BIGINT DEFAULT 0 COMMENT '命中总数',
@@ -414,7 +446,8 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_job_run (
   PRIMARY KEY (id),
   INDEX idx_job_id (job_id),
   INDEX idx_status (status),
-  INDEX idx_lease_until (lease_until)
+  INDEX idx_lease_until (lease_until),
+  INDEX idx_policy_version_id (policy_version_id)
 ) ENGINE=InnoDB COMMENT='清理任务运行实例';
 
 -- 清理成本台账
@@ -498,6 +531,7 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_record (
   metrics_json TEXT COMMENT '指标JSON',
   execution_time_ms BIGINT DEFAULT NULL COMMENT '执行时间(ms)',
   detector_source VARCHAR(100) DEFAULT NULL COMMENT '检测来源',
+  shadow_diff_json TEXT COMMENT '主轨/影子差异JSON',
   created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (id),
   INDEX idx_agent_id (agent_id),
@@ -505,6 +539,25 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_record (
   INDEX idx_job_run_id (job_run_id),
   INDEX idx_created_time (created_time)
 ) ENGINE=InnoDB COMMENT='清理审计记录';
+
+-- Shadow 对照记录
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_shadow_compare_record (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  trace_id VARCHAR(64) DEFAULT NULL COMMENT 'Trace ID',
+  job_run_id BIGINT DEFAULT NULL COMMENT '任务运行ID',
+  policy_id BIGINT DEFAULT NULL COMMENT '策略ID',
+  policy_version_id BIGINT DEFAULT NULL COMMENT '策略版本ID',
+  column_name VARCHAR(255) DEFAULT NULL COMMENT '字段',
+  main_verdict VARCHAR(50) DEFAULT NULL COMMENT '主轨判定',
+  shadow_verdict VARCHAR(50) DEFAULT NULL COMMENT '影子判定',
+  diff_level VARCHAR(32) DEFAULT NULL COMMENT '差异等级：NONE/LOW/HIGH',
+  diff_json TEXT COMMENT '差异详情JSON',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  INDEX idx_trace_id (trace_id),
+  INDEX idx_job_run_id (job_run_id),
+  INDEX idx_created_time (created_time)
+) ENGINE=InnoDB COMMENT='Shadow 对照记录';
 
 -- 清理人审任务
 CREATE TABLE IF NOT EXISTS datasentry_cleaning_review_task (
@@ -543,6 +596,8 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_rollback_run (
   total_target BIGINT DEFAULT 0 COMMENT '目标总数',
   total_success BIGINT DEFAULT 0 COMMENT '成功总数',
   total_failed BIGINT DEFAULT 0 COMMENT '失败总数',
+  verify_status VARCHAR(32) DEFAULT NULL COMMENT '校验状态：PENDING/PASSED/PARTIAL/FAILED',
+  conflict_level_summary VARCHAR(128) DEFAULT NULL COMMENT '冲突等级汇总',
   started_time TIMESTAMP NULL DEFAULT NULL COMMENT '开始时间',
   ended_time TIMESTAMP NULL DEFAULT NULL COMMENT '结束时间',
   created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -551,3 +606,30 @@ CREATE TABLE IF NOT EXISTS datasentry_cleaning_rollback_run (
   INDEX idx_job_run_id (job_run_id),
   INDEX idx_status (status)
 ) ENGINE=InnoDB COMMENT='清理回滚任务';
+
+-- 回滚校验记录
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_rollback_verify_record (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  rollback_run_id BIGINT NOT NULL COMMENT '回滚任务ID',
+  backup_record_id BIGINT NOT NULL COMMENT '备份记录ID',
+  status VARCHAR(32) NOT NULL COMMENT '状态：PASSED/FAILED',
+  verify_message VARCHAR(512) DEFAULT NULL COMMENT '校验说明',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  INDEX idx_rollback_run_id (rollback_run_id),
+  INDEX idx_backup_record_id (backup_record_id)
+) ENGINE=InnoDB COMMENT='回滚校验记录';
+
+-- 回滚冲突记录
+CREATE TABLE IF NOT EXISTS datasentry_cleaning_rollback_conflict_record (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  rollback_run_id BIGINT NOT NULL COMMENT '回滚任务ID',
+  backup_record_id BIGINT NOT NULL COMMENT '备份记录ID',
+  level VARCHAR(32) NOT NULL COMMENT '冲突等级：LOW/MEDIUM/HIGH',
+  reason VARCHAR(512) DEFAULT NULL COMMENT '冲突原因',
+  resolved TINYINT DEFAULT 0 COMMENT '是否已处理',
+  created_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (id),
+  INDEX idx_rollback_run_id (rollback_run_id),
+  INDEX idx_level (level)
+) ENGINE=InnoDB COMMENT='回滚冲突记录';

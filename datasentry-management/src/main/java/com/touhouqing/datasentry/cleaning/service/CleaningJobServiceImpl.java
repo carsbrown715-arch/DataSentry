@@ -174,13 +174,15 @@ public class CleaningJobServiceImpl implements CleaningJobService {
 		if (job == null) {
 			throw new InvalidInputException("清理任务不存在");
 		}
-		String policySnapshotJson = toJson(policyResolver.resolveSnapshot(job.getPolicyId()));
+		var policySnapshot = policyResolver.resolveSnapshot(job.getPolicyId());
+		String policySnapshotJson = toJson(policySnapshot);
 		LocalDateTime now = LocalDateTime.now();
 		CleaningJobRun run = CleaningJobRun.builder()
 			.jobId(jobId)
 			.status(CleaningJobRunStatus.QUEUED.name())
 			.attempt(0)
 			.policySnapshotJson(policySnapshotJson)
+			.policyVersionId(policySnapshot != null ? policySnapshot.getPolicyVersionId() : null)
 			.totalScanned(0L)
 			.totalFlagged(0L)
 			.totalWritten(0L)

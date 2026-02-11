@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -90,6 +91,8 @@ public class CleaningServiceImpl implements CleaningService {
 				traceId, agentId, request.getScene(), snapshot.getPolicyId(), snapshot.getPolicyName(),
 				sanitizeRequested, estimatedTokens, failClosed, allowlists.size());
 		CleaningContext result = pipeline.execute(context, sanitizeRequested);
+		shadowService.compareAndRecordIfEnabled(result, snapshot,
+				() -> pipeline.execute(buildShadowContext(result, snapshot), sanitizeRequested));
 		shadowService.submitIfEnabled(result, snapshot.getConfig());
 		recordOnlineCost(agentId, traceId, estimatedTokens, failClosed);
 		log.info("Cleaning online result traceId={} agentId={} verdict={} categories={} findings={}", traceId, agentId,
@@ -100,6 +103,26 @@ public class CleaningServiceImpl implements CleaningService {
 			.categories(resolveCategories(result.getFindings()))
 			.sanitizedText(sanitizeRequested ? result.getSanitizedText() : null)
 			.build();
+	}
+
+	private CleaningContext buildShadowContext(CleaningContext mainResult, CleaningPolicySnapshot snapshot) {
+		CleaningContext shadowContext = CleaningContext.builder()
+			.agentId(mainResult.getAgentId())
+			.traceId(mainResult.getTraceId())
+			.originalText(mainResult.getOriginalText())
+			.policySnapshot(snapshot)
+			.jobRunId(mainResult.getJobRunId())
+			.datasourceId(mainResult.getDatasourceId())
+			.tableName(mainResult.getTableName())
+			.pkJson(mainResult.getPkJson())
+			.columnName(mainResult.getColumnName())
+			.build();
+		for (Map.Entry<String, Object> entry : mainResult.getMetadata().entrySet()) {
+			shadowContext.getMetadata().put(entry.getKey(), entry.getValue());
+		}
+		shadowContext.getMetadata().put("shadowTrack", true);
+		shadowContext.getMetrics().put("startTimeMs", System.currentTimeMillis());
+		return shadowContext;
 	}
 
 	private CleaningJob resolveOnlineBudgetJob(Long agentId) {

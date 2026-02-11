@@ -51,4 +51,13 @@ public interface CleaningRollbackRunMapper extends BaseMapper<CleaningRollbackRu
 		return update(null, wrapper);
 	}
 
+	default int updateVerification(Long id, String verifyStatus, String conflictLevelSummary, LocalDateTime now) {
+		LambdaUpdateWrapper<CleaningRollbackRun> wrapper = new LambdaUpdateWrapper<CleaningRollbackRun>()
+			.eq(CleaningRollbackRun::getId, id)
+			.set(CleaningRollbackRun::getVerifyStatus, verifyStatus)
+			.set(CleaningRollbackRun::getConflictLevelSummary, conflictLevelSummary)
+			.set(CleaningRollbackRun::getUpdatedTime, now);
+		return update(null, wrapper);
+	}
+
 }

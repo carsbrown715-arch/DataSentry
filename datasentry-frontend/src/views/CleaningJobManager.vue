@@ -117,6 +117,11 @@
                 {{ formatRunStatusShort(scope.row.status) }}
               </template>
             </el-table-column>
+            <el-table-column label="策略版本" width="120">
+              <template #default="scope">
+                {{ scope.row.policyVersionId || '-' }}
+              </template>
+            </el-table-column>
             <el-table-column prop="totalScanned" label="扫描" width="100" />
             <el-table-column prop="totalFlagged" label="命中" width="100" />
             <el-table-column prop="actualCost" label="成本" width="120" />
@@ -516,6 +521,12 @@
               {{ rollbackRun.totalTarget || 0 }} / {{ rollbackRun.totalSuccess || 0 }} /
               {{ rollbackRun.totalFailed || 0 }}
             </el-descriptions-item>
+            <el-descriptions-item label="校验状态">
+              {{ formatRollbackVerifyStatus(rollbackRun.verifyStatus) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="冲突汇总">
+              {{ rollbackRun.conflictLevelSummary || '-' }}
+            </el-descriptions-item>
             <el-descriptions-item label="创建时间">
               {{ formatDateTime(rollbackRun.createdTime) }}
             </el-descriptions-item>
@@ -671,6 +682,16 @@
       return '预算超过硬阈值';
     }
     return '-';
+  };
+
+  const formatRollbackVerifyStatus = status => {
+    const labels = {
+      PENDING: '待校验',
+      PASSED: '通过',
+      PARTIAL: '部分通过',
+      FAILED: '失败',
+    };
+    return labels[status] || status || '-';
   };
 
   const formatJobBudget = job => {

@@ -6,6 +6,27 @@ export interface CleaningPolicyRuleItem {
   priority?: number;
 }
 
+export interface CleaningPolicyPublishRequest {
+  note?: string;
+  operator?: string;
+}
+
+export interface CleaningPolicyRollbackVersionRequest {
+  versionId: number;
+  note?: string;
+  operator?: string;
+}
+
+export interface CleaningPolicyVersion {
+  id: number;
+  policyId: number;
+  versionNo: number;
+  status: string;
+  defaultAction?: string;
+  createdTime?: string;
+  updatedTime?: string;
+}
+
 export interface CleaningPolicyView {
   id: number;
   name: string;
@@ -162,6 +183,7 @@ export interface CleaningJobRun {
   status: string;
   checkpointJson?: string;
   policySnapshotJson?: string;
+  policyVersionId?: number;
   totalScanned?: number;
   totalFlagged?: number;
   totalWritten?: number;
@@ -373,6 +395,8 @@ export interface CleaningRollbackRun {
   totalTarget?: number;
   totalSuccess?: number;
   totalFailed?: number;
+  verifyStatus?: string;
+  conflictLevelSummary?: string;
   startedTime?: string;
   endedTime?: string;
   createdTime?: string;
@@ -613,6 +637,35 @@ class CleaningService {
 
   async updatePolicyRules(policyId: number, rules: CleaningPolicyRuleItem[]): Promise<void> {
     await axios.put<ApiResponse<void>>(`${API_BASE_URL}/policies/${policyId}/rules`, { rules });
+  }
+
+  async listPolicyVersions(policyId: number): Promise<CleaningPolicyVersion[]> {
+    const response = await axios.get<ApiResponse<CleaningPolicyVersion[]>>(
+      `${API_BASE_URL}/policies/${policyId}/versions`,
+    );
+    return response.data.data || [];
+  }
+
+  async publishPolicy(
+    policyId: number,
+    payload?: CleaningPolicyPublishRequest,
+  ): Promise<CleaningPolicyVersion | null> {
+    const response = await axios.post<ApiResponse<CleaningPolicyVersion>>(
+      `${API_BASE_URL}/policies/${policyId}/publish`,
+      payload || {},
+    );
+    return response.data.data || null;
+  }
+
+  async rollbackPolicyVersion(
+    policyId: number,
+    payload: CleaningPolicyRollbackVersionRequest,
+  ): Promise<CleaningPolicyVersion | null> {
+    const response = await axios.post<ApiResponse<CleaningPolicyVersion>>(
+      `${API_BASE_URL}/policies/${policyId}/rollback-version`,
+      payload,
+    );
+    return response.data.data || null;
   }
 
   async listRules(): Promise<CleaningRule[]> {

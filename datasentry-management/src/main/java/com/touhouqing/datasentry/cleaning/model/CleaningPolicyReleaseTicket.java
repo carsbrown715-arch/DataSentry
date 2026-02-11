@@ -14,34 +14,22 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("datasentry_cleaning_rollback_run")
-public class CleaningRollbackRun {
+@TableName("datasentry_cleaning_policy_release_ticket")
+public class CleaningPolicyReleaseTicket {
 
 	@TableId(type = IdType.AUTO)
 	private Long id;
 
-	private Long jobRunId;
+	private Long policyId;
 
-	private String status;
+	private Long versionId;
 
-	private Long checkpointId;
+	private String action;
 
-	private Long totalTarget;
+	private String note;
 
-	private Long totalSuccess;
-
-	private Long totalFailed;
-
-	private String verifyStatus;
-
-	private String conflictLevelSummary;
-
-	private LocalDateTime startedTime;
-
-	private LocalDateTime endedTime;
+	private String operator;
 
 	private LocalDateTime createdTime;
-
-	private LocalDateTime updatedTime;
 
 }

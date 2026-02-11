@@ -15,6 +15,10 @@ public class CleaningPolicySnapshot {
 
 	private Long policyId;
 
+	private Long policyVersionId;
+
+	private Integer policyVersionNo;
+
 	private String policyName;
 
 	private String defaultAction;

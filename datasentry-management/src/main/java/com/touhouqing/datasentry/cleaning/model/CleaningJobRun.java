@@ -37,6 +37,8 @@ public class CleaningJobRun {
 
 	private String policySnapshotJson;
 
+	private Long policyVersionId;
+
 	private Long totalScanned;
 
 	private Long totalFlagged;

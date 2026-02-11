@@ -53,6 +53,8 @@ public class CleaningRecord {
 
 	private String detectorSource;
 
+	private String shadowDiffJson;
+
 	@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
 	private LocalDateTime createdTime;
 
